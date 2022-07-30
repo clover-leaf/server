@@ -33,6 +33,7 @@ void main(List<String> args) async {
 }
 
 Future<shelf.Response> _echoRequest(shelf.Request request) async {
+  return shelf.Response.ok('Request for $request');
   switch (request.url.toString()) {
     case 'users':
       return await _echoUsers(request);
