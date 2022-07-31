@@ -351,6 +351,7 @@ class Api {
             final toggleTileData =
                 tileDataResponse.data as Map<String, dynamic>;
             toggleTileData.remove('id');
+            toggleTileData['tile_type'] = 0;
             final completeTileData = Map<String, dynamic>.from(tileConfig);
             completeTileData['tile_data'] = toggleTileData;
             tileConfigs.add(completeTileData);
@@ -364,6 +365,7 @@ class Api {
                 .execute();
             final textTileData = tileDataResponse.data as Map<String, dynamic>;
             textTileData.remove('id');
+            textTileData['tile_type'] = 1;
             final completeTileData = Map<String, dynamic>.from(tileConfig);
             completeTileData['tile_data'] = textTileData;
             tileConfigs.add(completeTileData);
