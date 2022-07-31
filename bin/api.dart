@@ -33,6 +33,7 @@ class Api {
       try {
         final payload =
             jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        print(payload);
         final id = payload['id'];
         final key = payload['key'];
         final name = payload['name'];
@@ -434,7 +435,7 @@ class Api {
             final textTileData =
                 (tileDataResponse.data as List).first as Map<String, dynamic>;
             textTileData.remove('id');
-            textTileData['tile_type'] = 0;
+            textTileData['tile_type'] = 1;
             tileDataJson['tile_data'] = textTileData;
             break;
         }
