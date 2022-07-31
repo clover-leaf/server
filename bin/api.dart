@@ -415,6 +415,7 @@ class Api {
             final toggleTileData =
                 (tileDataResponse.data as List).first as Map<String, dynamic>;
             toggleTileData.remove('id');
+            toggleTileData['tile_type'] = 0;
             tileDataJson['tile_data'] = toggleTileData;
             break;
           case 1:
@@ -431,6 +432,7 @@ class Api {
             final textTileData =
                 (tileDataResponse.data as List).first as Map<String, dynamic>;
             textTileData.remove('id');
+            textTileData['tile_type'] = 0;
             tileDataJson['tile_data'] = textTileData;
             break;
         }
@@ -485,6 +487,7 @@ class Api {
             final toggleTileData =
                 (tileDataResponse.data as List).first as Map<String, dynamic>;
             toggleTileData.remove('id');
+            toggleTileData['tile_type'] = 0;
             tileDataJson['tile_data'] = toggleTileData;
             break;
           case 1:
@@ -501,6 +504,7 @@ class Api {
             final textTileData =
                 (tileDataResponse.data as List).first as Map<String, dynamic>;
             textTileData.remove('id');
+            textTileData['tile_type'] = 1;
             tileDataJson['tile_data'] = textTileData;
             break;
         }
