@@ -7,7 +7,7 @@ import 'package:shelf/shelf_io.dart' as io;
 import 'package:supabase/supabase.dart';
 
 // For Google Cloud Run, set _hostname to '0.0.0.0'.
-const _hostname = 'localhost';
+const _hostname = '0.0.0.0';
 
 void main(List<String> args) async {
   var parser = ArgParser()..addOption('port', abbr: 'p');
@@ -33,7 +33,7 @@ void main(List<String> args) async {
 }
 
 Future<shelf.Response> _echoRequest(shelf.Request request) async {
-  return shelf.Response.ok('Request for $request');
+  // return shelf.Response.ok('Request for $request');
   switch (request.url.toString()) {
     case 'users':
       return await _echoUsers(request);
@@ -46,8 +46,18 @@ Future<shelf.Response> _echoUsers(shelf.Request request) async {
   final client = SupabaseClient('https://mwwncvkpflyreaofpapd.supabase.co',
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13d25jdmtwZmx5cmVhb2ZwYXBkIiwicm9sZSI6ImFub24iLCJpYXQiOjE2NTkxNzY0NzMsImV4cCI6MTk3NDc1MjQ3M30.ocRvvDEt5zaZUETnGIrexN_OgewsfEh3Ufceh3wniv4');
 
-  // Retrieve data from 'users' table
-  final response = await client.from('projects').select().execute();
+  // // Retrieve data from 'users' table
+  // final response = await client.from('projects').select().execute();
+  // final response = await client.from('projects').insert({
+  //   'id': 'ce81c472-5007-4d6e-b664-71cde7030468',
+  //   'name': 'fuck',
+  // }).execute();
+  // final response = await client
+  //     .from('projects')
+  //     .select()
+  //     .match({'name': 'thit_than'}).execute();
+  final response = await client.from('projects').update({'name': 'pls'}).match(
+      {'id': 'ce81c472-5007-4d6e-b664-71cde7030468'}).execute();
 
   var map = {'users': response.data};
 
