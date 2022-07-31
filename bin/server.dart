@@ -10,8 +10,8 @@ import 'api.dart';
 
 
 // For Google Cloud Run, set _hostname to '0.0.0.0'.
-// const _hostname = '0.0.0.0';
-const _hostname = 'localhost';
+const _hostname = '0.0.0.0';
+// const _hostname = 'localhost';
 
 void main(List<String> args) async {
   final parser = ArgParser()..addOption('port', abbr: 'p');
