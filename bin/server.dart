@@ -28,8 +28,9 @@ void main(List<String> args) async {
     return;
   }
   const corsHeaders = {
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": "http://localhost:3000",
     "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+    "Access-Control-Allow-Credentials": "true",
     "Access-Control-Allow-Headers": "*",
   };
 
