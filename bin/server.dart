@@ -1,17 +1,17 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:args/args.dart';
-import 'package:shelf/shelf.dart' as shelf;
+import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as io;
 import 'package:supabase/supabase.dart';
 
 import 'api.dart';
 
-
 // For Google Cloud Run, set _hostname to '0.0.0.0'.
-const _hostname = '0.0.0.0';
-// const _hostname = 'localhost';
+// const _hostname = '0.0.0.0';
+const _hostname = 'localhost';
 
 void main(List<String> args) async {
   final parser = ArgParser()..addOption('port', abbr: 'p');
@@ -28,38 +28,51 @@ void main(List<String> args) async {
     return;
   }
 
-  // final handler = const shelf.Pipeline()
-  //     .addMiddleware(shelf.logRequests())
-  //     .addHandler(_echoRequest);
-  final handler = Api().handler;
+  // final handler =
+  //     const Pipeline().addMiddleware(logRequests()).addHandler(_echoRequest);
+  final handler =  const Pipeline().addMiddleware(logRequests()).addHandler(Api().handler);
 
   final server = await io.serve(handler, _hostname, port);
   print('Serving at http://${server.address.host}:${server.port}');
 }
 
-Future<shelf.Response> _echoRequest(shelf.Request request) async {
+Future<Response> _echoRequest(Request request) async {
   // return shelf.Response.ok('Request for $request');
   switch (request.url.toString()) {
     case 'users':
-      return await _echoUsers(request);
+      return await _echoBroker(request);
     default:
-      return shelf.Response.ok('Invalid url');
+      return Response.ok('Invalid url');
   }
 }
 
-Future<shelf.Response> _echoUsers(shelf.Request request) async {
+class Ticker {
+  const Ticker();
+  Stream<int> tick({required int ticks}) {
+    return Stream.periodic(const Duration(seconds: 1), (x) => ticks - x - 1)
+        .take(ticks);
+  }
+}
+
+StreamSubscription<int>? _tickerSubscription;
+
+Future<Response> _echoBroker(Request request) async {
+  final payload =
+      jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+  _tickerSubscription?.cancel();
+  _tickerSubscription = Ticker()
+      .tick(ticks: payload['duration'])
+      .listen((duration) => print(duration));
+  return Response.ok(null);
+}
+
+Future<Response> _echoUsers(Request request) async {
   final client = SupabaseClient('https://mwwncvkpflyreaofpapd.supabase.co',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13d25jdmtwZmx5cmVhb2ZwYXBkIiwicm9sZSI6ImFub24iLCJpYXQiOjE2NTkxNzY0NzMsImV4cCI6MTk3NDc1MjQ3M30.ocRvvDEt5zaZUETnGIrexN_OgewsfEh3Ufceh3wniv4');
-  final body = {
-    'id': 'd7cfd791-5d7d-4c80-b313-9b5991cdc35f',
-    'name': 'shelf',
-    'key': 'shelf',
-    'description': null,
-    'created_at': '2022-07-31 05:54:35.000Z',
-    'updated_at': '2022-07-31 05:54:35.000Z',
-    'created_by': '8e9668a4-c08d-4622-b3b0-0b5f8fea95c1',
-    'updated_by': '8e9668a4-c08d-4622-b3b0-0b5f8fea95c1'
-  };
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13d25jdmtwZmx5cmVhb2ZwYXBkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTY1OTE3NjQ3MywiZXhwIjoxOTc0NzUyNDczfQ.rmqW5s0jSY_1f4NPdIdnuBW9pR1nEJRcMdJWqgB7Ekc');
+
+  // eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13d25jdmtwZmx5cmVhb2ZwYXBkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTY1OTE3NjQ3MywiZXhwIjoxOTc0NzUyNDczfQ.rmqW5s0jSY_1f4NPdIdnuBW9pR1nEJRcMdJWqgB7Ekc
+
+  // eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13d25jdmtwZmx5cmVhb2ZwYXBkIiwicm9sZSI6ImFub24iLCJpYXQiOjE2NTkxNzY0NzMsImV4cCI6MTk3NDc1MjQ3M30.ocRvvDEt5zaZUETnGIrexN_OgewsfEh3Ufceh3wniv4
   // // Retrieve data from 'users' table
   // final response = await client.from('projects').select().execute();
   // final response = await client.from('projects').insert({
@@ -70,9 +83,19 @@ Future<shelf.Response> _echoUsers(shelf.Request request) async {
   //     .from('projects')
   //     .select()
   //     .match({'name': 'thit_than'}).execute();
-  final response = await client.from('project').insert(body).execute();
+  // final response = await client.from('project').insert(body).execute();
+  final response = await client
+      .rpc('create_schema', params: {'s_name': 'progress'}).execute();
+  print(response.error);
+  print(response.data);
+  print(response.status);
+  final response_ = await client.rpc('create_table',
+      params: {'s_name': 'progress', 't_name': 'gakusei'}).execute();
+  print(response_.error);
+  print(response_.data);
+  print(response_.status);
 
-  final map = {'users': response.data};
-
-  return shelf.Response.ok(jsonEncode(map));
+  return Response.ok(jsonEncode({
+    'status': 'success',
+  }));
 }

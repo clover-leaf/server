@@ -1,22 +1,294 @@
-// ignore_for_file: non_constant_identifier_names
-
 import 'dart:convert';
+import 'dart:math';
 
+import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
 import 'package:supabase/supabase.dart';
 import 'package:http/http.dart' as http;
+import 'package:crypto/crypto.dart';
+import 'package:uuid/uuid.dart';
 
 class Api {
+  String generateRandomString(int len) {
+    var r = Random.secure();
+    const chars =
+        'AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz1234567890';
+    return List.generate(len, (index) => chars[r.nextInt(chars.length)]).join();
+  }
+
   Handler get handler {
     final router = Router();
     final httpClient = http.Client();
-    final client = SupabaseClient('https://mwwncvkpflyreaofpapd.supabase.co',
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13d25jdmtwZmx5cmVhb2ZwYXBkIiwicm9sZSI6ImFub24iLCJpYXQiOjE2NTkxNzY0NzMsImV4cCI6MTk3NDc1MjQ3M30.ocRvvDEt5zaZUETnGIrexN_OgewsfEh3Ufceh3wniv4');
+    final client = SupabaseClient(
+      'https://mwwncvkpflyreaofpapd.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.'
+          'eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13d25jdmtwZmx5cmVhb2ZwYXBkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTY1OTE3NjQ3MywiZXhwIjoxOTc0NzUyNDczfQ.'
+          'rmqW5s0jSY_1f4NPdIdnuBW9pR1nEJRcMdJWqgB7Ekc',
+      schema: 'sys',
+    );
 
-    final kBaseURL = 'io.adafruit.com';
-    final ioKey = 'aio_TanT84FMKkLpM2wYCrOIbOMUCwmW';
-    final username = 'thangnguyen106';
+    const kBaseURL = 'io.adafruit.com';
+    const ioKey = 'aio_TanT84FMKkLpM2wYCrOIbOMUCwmW';
+    const username = 'thangnguyen106';
+    const serviceID = 'service_ug3gq7y';
+    const templateID = 'template_gwu7agv';
+    const userID = 'PnSycmtlbZDY8Knrw';
+    const secretKey = 'VfyVZu_FdIUwQgmsOulUg';
+    const verifyEmailSecret = 'thitthanxiumai';
+    const verifyEmailDuration = Duration(minutes: 5);
+
+    /// ====================== AUTH ==============================
+
+    /// Send email to verify
+    Future<Response> sendVerifiedEmail({
+      required String name,
+      required String email,
+      required String verifiedLink,
+    }) async {
+      final uri = Uri.parse('https://api.emailjs.com/api/v1.0/email/send');
+      final verifiedRes = await http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'service_id': serviceID,
+          'template_id': templateID,
+          'user_id': userID,
+          'accessToken': secretKey,
+          'template_params': {
+            'to_name': name,
+            'to_email': email,
+            'link': verifiedLink,
+          },
+        }),
+      );
+      if (verifiedRes.statusCode == 200) {
+        return Response.ok(jsonEncode(
+          {
+            'data':
+                'Check link in email to verify. The link will expire in 5 minutes'
+          },
+        ));
+      } else {
+        return Response.badRequest(
+            body: jsonEncode(
+          {'error': 'There is a error in SMTP service has happened'},
+        ));
+      }
+    }
+
+    /// Sign up
+    router.post('/api/register', (Request request) async {
+      final payload =
+          jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+      final name = payload['name'];
+      final email = payload['email'];
+      final password = payload['password'];
+      // create uuid  
+      final id = Uuid().v4();
+      // hash password with salt
+      final salt = generateRandomString(6);
+      final bytes = utf8.encode(password + salt);
+      final hash = sha256.convert(bytes).toString();
+      // create verified hash to confirm email
+      final verifiedSalt = utf8.encode(generateRandomString(18));
+      final verifiedHash = sha256.convert(verifiedSalt).toString();
+      // insert new user info
+      final res = await client.from('customer').insert({
+        'id': id,
+        'email': email,
+        'name': name,
+        'salt': salt,
+        'hash': hash,
+        'email_verified': false,
+        'verified_hash': verifiedHash,
+      }).execute();
+      if (res.hasError) {
+        print(res.error);
+        return Response.badRequest(
+            body: jsonEncode(
+          {'error': 'This email has been used'},
+        ));
+      }
+      // create jwt token to confirm
+      final jwt = JWT({'email': email, 'verified_hash': verifiedHash});
+      final token = jwt.sign(
+        SecretKey(verifyEmailSecret),
+        expiresIn: verifyEmailDuration,
+      );
+      final verifiedLink = '0.0.0.0:8080/api/verify-email/$token';
+      // send confirm email
+      return sendVerifiedEmail(
+        email: email,
+        name: name,
+        verifiedLink: verifiedLink,
+      );
+    });
+
+    /// Resend verify email
+    router.post('/api/resend-verify', (Request request) async {
+      final payload =
+          jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+      final sessionToken = payload['session_token'];
+      // create verified hash to confirm email
+      final verifiedSalt = utf8.encode(generateRandomString(18));
+      final verifiedHash = sha256.convert(verifiedSalt).toString();
+      // select customer row
+      final res = await client
+          .from('customer')
+          .select()
+          .match({'id': sessionToken})
+          .single()
+          .execute();
+      if (res.hasError) {
+        return Response.badRequest(body: jsonEncode({'error': 'Unauthorized'}));
+      }
+      final email = res.data['email'];
+      final name = res.data['name'];
+      final emailVerified = res.data['email_verified'];
+      if (emailVerified) {
+        return Response.badRequest(
+            body: jsonEncode({'error': 'Email has verified'}));
+      }
+      // update verified_hash
+      final updateRes = await client
+          .from('customer')
+          .update({'verified_hash': verifiedHash})
+          .match({'id': sessionToken})
+          .single()
+          .execute();
+      if (updateRes.hasError) {
+        return Response.badRequest(body: jsonEncode({'error': 'Unauthorized'}));
+      }
+      // create jwt token to confirm
+      final jwt = JWT({'email': email, 'verified_hash': verifiedHash});
+      final token = jwt.sign(
+        SecretKey(verifyEmailSecret),
+        expiresIn: verifyEmailDuration,
+      );
+      final verifiedLink = '0.0.0.0:8080/api/verify-email/$token';
+      // send confirm email
+      return sendVerifiedEmail(
+        email: email,
+        name: name,
+        verifiedLink: verifiedLink,
+      );
+    });
+
+    /// Verify email
+    router.get('/api/verify-email/<token>',
+        (Request request, String token) async {
+      try {
+        final jwt = JWT.verify(token, SecretKey(verifyEmailSecret));
+        final email = jwt.payload['email'];
+        final verifiedHash = jwt.payload['verified_hash'];
+        final res = await client
+            .from('customer')
+            .select()
+            .match({'email': email})
+            .single()
+            .execute();
+        if (res.hasError) {
+          return Response.badRequest(
+              body: jsonEncode(
+            {'error': 'Unauthorized'},
+          ));
+        }
+        final emailVerified = res.data['email_verified'];
+        if (emailVerified) {
+          return Response.badRequest(
+              body: jsonEncode(
+            {'error': 'This email has verified'},
+          ));
+        }
+        // update verify status
+        final updateRes = await client
+            .from('customer')
+            .update({'email_verified': true})
+            .match({'email': email, 'verified_hash': verifiedHash})
+            .single()
+            .execute();
+        if (updateRes.hasError) {
+          return Response.badRequest(
+              body: jsonEncode(
+            {'error': 'This link is old, use latest link to verify'},
+          ));
+        }
+        return Response.ok(jsonEncode({'data': 'Verify email successfully'}));
+      } on JWTExpiredError {
+        return Response.badRequest(
+            body: jsonEncode(
+          {'error': 'Verified link has expired'},
+        ));
+      } on JWTError {
+        return Response.badRequest(
+            body: jsonEncode(
+          {'error': 'Invalid signature'},
+        ));
+      }
+    });
+
+    /// Sign in
+    router.post('/api/user-sessions', (Request request) async {
+      final payload =
+          jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+      final email = payload['email'];
+      final password = payload['password'];
+      // hash password with salt
+      final res = await client
+          .from('customer')
+          .select()
+          .match({'email': email})
+          .single()
+          .execute();
+      if (res.hasError) {
+        return Response.badRequest(
+            body: jsonEncode({'error': 'This email has not yet signed up'}));
+      }
+
+      final salt = res.data['salt'];
+      final hashDB = res.data['hash'];
+      final token = res.data['id'];
+      final emailVerified = res.data['email_verified'];
+
+      final bytes = utf8.encode(password + salt);
+      final hash = sha256.convert(bytes).toString();
+      if (hash == hashDB) {
+        if (emailVerified) {
+          return Response.ok(jsonEncode({'session_token': token}));
+        } else {
+          return Response.badRequest(
+              body: jsonEncode({
+            'error': 'Has not yet verify email',
+            'session_token': token,
+          }));
+        }
+      } else {
+        return Response.badRequest(
+            body: jsonEncode({'error': 'Email or password not matched'}));
+      }
+    });
+
+    /// ====================== TENANT ==============================
+
+    /// Create tenant
+    router.post('/api/tenants', (Request request) async {
+      final payload =
+          jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+      final name = payload['name'];
+
+      // call rpc to create new schema
+      final resSchema =
+          await client.rpc('create_schema', params: {'s_name': name}).execute();
+      if (resSchema.hasError) return Response.badRequest();
+
+      // call rpc to create new project table in new schema
+      final resProject = await client
+          .rpc('create_project', params: {'s_name': name}).execute();
+      if (resProject.hasError) return Response.badRequest();
+
+      return Response.ok(null);
+    });
 
     /// ====================== PROJECT ==============================
 
@@ -55,29 +327,36 @@ class Api {
           },
         );
         if (response.statusCode == 201) {
-          final adafruit_body =
-              jsonDecode(response.body) as Map<String, dynamic>;
-          final supabaseInstance = {
-            'id': id as String,
-            'name': name as String,
-            'key': key as String,
-            'description': description as String?,
-            'created_at': adafruit_body['created_at'] as String,
-            'updated_at': adafruit_body['updated_at'] as String,
-            'created_by': userId as String,
-            'updated_by': userId,
-          };
-          final supaReponse =
-              await client.from('project').insert(supabaseInstance).execute();
-          final result = supaReponse.data as List;
-          return Response.ok(
-            jsonEncode({'success': true, 'data': result.first}),
-            headers: {'Content-type': 'application/json'},
-          );
+          try {
+            final adafruitBody =
+                jsonDecode(response.body) as Map<String, dynamic>;
+            final supabaseInstance = {
+              'id': id as String,
+              'name': name as String,
+              'key': key as String,
+              'description': description as String?,
+              'created_at': adafruitBody['created_at'] as String,
+              'updated_at': adafruitBody['updated_at'] as String,
+              'created_by': userId as String,
+              'updated_by': userId,
+            };
+            print(supabaseInstance);
+            final supaReponse =
+                await client.from('project').insert(supabaseInstance).execute();
+            final result = supaReponse.data as List;
+            return Response.ok(
+              jsonEncode({'success': true, 'data': result.first}),
+              headers: {'Content-type': 'application/json'},
+            );
+          } catch (e) {
+            print(e);
+            return Response.badRequest(body: jsonEncode({'success': false}));
+          }
         } else {
           return Response.badRequest(body: jsonEncode({'success': false}));
         }
       } catch (e) {
+        print(e);
         return Response.badRequest(body: jsonEncode({'success': false}));
       }
     });
@@ -109,14 +388,14 @@ class Api {
           },
         );
         if (response.statusCode == 200) {
-          final adafruit_body =
+          final adafruitBody =
               jsonDecode(response.body) as Map<String, dynamic>;
           final supabaseInstance = {
             'name': name as String,
             'key': key as String,
             'description': description as String?,
-            'created_at': adafruit_body['created_at'] as String,
-            'updated_at': adafruit_body['updated_at'] as String,
+            'created_at': adafruitBody['created_at'] as String,
+            'updated_at': adafruitBody['updated_at'] as String,
             'created_by': createBy as String,
             'updated_by': userId as String,
           };
@@ -215,7 +494,7 @@ class Api {
           },
         );
         if (response.statusCode == 201) {
-          final adafruit_body =
+          final adafruitBody =
               jsonDecode(response.body) as Map<String, dynamic>;
           // add to device table
           final supabaseInstance = {
@@ -225,8 +504,8 @@ class Api {
             'key': key as String,
             'description': description as String?,
             'json_enable': jsonEnable as bool,
-            'created_at': adafruit_body['created_at'] as String,
-            'updated_at': adafruit_body['updated_at'] as String,
+            'created_at': adafruitBody['created_at'] as String,
+            'updated_at': adafruitBody['updated_at'] as String,
             'created_by': userID as String,
             'updated_by': userID,
           };
@@ -289,7 +568,7 @@ class Api {
           },
         );
         if (response.statusCode == 200) {
-          final adafruit_body =
+          final adafruitBody =
               jsonDecode(response.body) as Map<String, dynamic>;
           final supabaseInstance = {
             'id': id as String,
@@ -298,8 +577,8 @@ class Api {
             'key': key as String,
             'description': description as String?,
             'json_enable': jsonEnable as bool,
-            'created_at': adafruit_body['created_at'] as String,
-            'updated_at': adafruit_body['updated_at'] as String,
+            'created_at': adafruitBody['created_at'] as String,
+            'updated_at': adafruitBody['updated_at'] as String,
             'created_by': userID as String,
             'updated_by': userID,
           };
