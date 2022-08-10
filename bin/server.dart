@@ -27,10 +27,26 @@ void main(List<String> args) async {
     exitCode = 64;
     return;
   }
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "*",
+  };
+
+  Response? _options(Request request) => (request.method == "OPTIONS")
+      ? Response.ok(null, headers: corsHeaders)
+      : null;
+
+  Response _cors(Response response) => response.change(headers: corsHeaders);
+  final fixCORS =
+      createMiddleware(requestHandler: _options, responseHandler: _cors);
 
   // final handler =
   //     const Pipeline().addMiddleware(logRequests()).addHandler(_echoRequest);
-  final handler =  const Pipeline().addMiddleware(logRequests()).addHandler(Api().handler);
+  final handler = const Pipeline()
+      .addMiddleware(fixCORS)
+      .addMiddleware(logRequests())
+      .addHandler(Api().handler);
 
   final server = await io.serve(handler, _hostname, port);
   print('Serving at http://${server.address.host}:${server.port}');
