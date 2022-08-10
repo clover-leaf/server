@@ -31,7 +31,7 @@ void main(List<String> args) async {
     "Access-Control-Allow-Origin": "http://localhost:3000",
     "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
     "Access-Control-Allow-Credentials": "true",
-    "Access-Control-Allow-Headers": "*",
+    "Access-Control-Allow-Headers": "Origin, X-Requested-With, Content-Type, Accept",
   };
 
   Response? _options(Request request) => (request.method == "OPTIONS")
