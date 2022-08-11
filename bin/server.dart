@@ -10,8 +10,8 @@ import 'package:supabase/supabase.dart';
 import 'api.dart';
 
 // For Google Cloud Run, set _hostname to '0.0.0.0'.
-const _hostname = '0.0.0.0';
-// const _hostname = 'localhost';
+// const _hostname = '0.0.0.0';
+const _hostname = 'localhost';
 
 void main(List<String> args) async {
   final parser = ArgParser()..addOption('port', abbr: 'p');
@@ -31,7 +31,8 @@ void main(List<String> args) async {
     "Access-Control-Allow-Origin": "http://localhost:3000",
     "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
     "Access-Control-Allow-Credentials": "true",
-    "Access-Control-Allow-Headers": "Origin, X-Requested-With, Content-Type, Accept",
+    "Access-Control-Allow-Headers":
+        "Authorization, Origin, X-Requested-With, Content-Type, Accept",
   };
 
   Response? _options(Request request) => (request.method == "OPTIONS")
@@ -43,7 +44,7 @@ void main(List<String> args) async {
       createMiddleware(requestHandler: _options, responseHandler: _cors);
 
   // final handler =
-  //     const Pipeline().addMiddleware(logRequests()).addHandler(_echoRequest);
+      // const Pipeline().addMiddleware(logRequests()).addHandler(_echoRequest);
   final handler = const Pipeline()
       .addMiddleware(fixCORS)
       .addMiddleware(logRequests())
@@ -57,7 +58,7 @@ Future<Response> _echoRequest(Request request) async {
   // return shelf.Response.ok('Request for $request');
   switch (request.url.toString()) {
     case 'users':
-      return await _echoBroker(request);
+      return await _echoUsers(request);
     default:
       return Response.ok('Invalid url');
   }
@@ -90,27 +91,27 @@ Future<Response> _echoUsers(Request request) async {
   // eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13d25jdmtwZmx5cmVhb2ZwYXBkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTY1OTE3NjQ3MywiZXhwIjoxOTc0NzUyNDczfQ.rmqW5s0jSY_1f4NPdIdnuBW9pR1nEJRcMdJWqgB7Ekc
 
   // eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13d25jdmtwZmx5cmVhb2ZwYXBkIiwicm9sZSI6ImFub24iLCJpYXQiOjE2NTkxNzY0NzMsImV4cCI6MTk3NDc1MjQ3M30.ocRvvDEt5zaZUETnGIrexN_OgewsfEh3Ufceh3wniv4
-  // // Retrieve data from 'users' table
-  // final response = await client.from('projects').select().execute();
-  // final response = await client.from('projects').insert({
-  //   'id': 'ce81c472-5007-4d6e-b664-71cde7030468',
-  //   'name': 'fuck',
-  // }).execute();
-  // final response = await client
-  //     .from('projects')
-  //     .select()
-  //     .match({'name': 'thit_than'}).execute();
-  // final response = await client.from('project').insert(body).execute();
-  final response = await client
-      .rpc('create_schema', params: {'s_name': 'progress'}).execute();
-  print(response.error);
-  print(response.data);
-  print(response.status);
-  final response_ = await client.rpc('create_table',
-      params: {'s_name': 'progress', 't_name': 'gakusei'}).execute();
-  print(response_.error);
-  print(response_.data);
-  print(response_.status);
+
+  // final createSchemaRes = await client
+  //     .rpc('create_schema', params: {'s_name': 'progress'}).execute();
+  // print(createSchemaRes.error);
+  // print(createSchemaRes.data);
+  // print(createSchemaRes.status);
+  // final getSchemaRes = await client
+  //     .rpc('get_db_schemas').execute();
+  // print(getSchemaRes.error);
+  // print(getSchemaRes.data);
+  // print(getSchemaRes.status);
+  // final response_ = await client.rpc('change_postgrest_db_schemas',
+  //     params: {"schemas": "public, storage, bee, sys"}).execute();
+  // print(response_.error);
+  // print(response_.data);
+  // print(response_.status);
+  final resProject =
+      await client.rpc('create_project', params: {'s_name': 'bee'}).execute();
+  print(resProject.error);
+  print(resProject.data);
+  print(resProject.status);
 
   return Response.ok(jsonEncode({
     'status': 'success',
