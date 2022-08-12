@@ -75,8 +75,26 @@ class UnauthorizedError {
   }
 }
 
+class UserNotExistError {
+  static Response message() {
+    return Response(400, body: jsonEncode({'message': 'This account not exist'}));
+  }
+}
+
+class DomainNotExistError {
+  static Response message() {
+    return Response(400, body: jsonEncode({'message': 'This domain not exist'}));
+  }
+}
+
+class DomainHasBeenUsedError {
+  static Response message() {
+    return Response(400, body: jsonEncode({'message': 'This domain name has been used'}));
+  }
+}
+
 class DatabaseError {
   static Response message() {
-    return Response(401, body: jsonEncode({'message': 'There is something wrong happened with Database'}));
+    return Response(400, body: jsonEncode({'message': 'There is something wrong happened with Database'}));
   }
 }

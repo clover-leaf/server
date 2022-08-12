@@ -13,6 +13,9 @@ import 'package:uuid/uuid.dart';
 import 'error_service.dart';
 
 class Api {
+  /// .env
+  final env = DotEnv(includePlatformEnvironment: true)..load();
+
   /// generate random salt to hash
   String generateRandomString(int len) {
     var r = Random.secure();
@@ -21,15 +24,20 @@ class Api {
     return List.generate(len, (index) => chars[r.nextInt(chars.length)]).join();
   }
 
-  Handler get handler {
-    final router = Router();
-    // load env
-    var env = DotEnv(includePlatformEnvironment: true)..load();
-    final client = SupabaseClient(
+  /// create SupabaseClient with given schema
+  SupabaseClient createSupabaseClient(String schema) {
+    return SupabaseClient(
       env['SUPABASE_URL']!,
       env['SECRET_ROLE']!,
-      schema: 'sys',
+      schema: schema,
     );
+  }
+
+  Handler get handler {
+    final router = Router();
+    final schemas = ['public', 'storage', 'sys'];
+    final supabaseClients = <String, dynamic>{};
+    supabaseClients['sys'] = createSupabaseClient('sys');
 
     final nextJsUrl = env['NEXTJS_URL']!;
     final emailjs = {
@@ -86,7 +94,7 @@ class Api {
       final verifiedSalt = utf8.encode(generateRandomString(18));
       final verifiedHash = sha256.convert(verifiedSalt).toString();
       // insert new user info
-      final res = await client.from('customer').insert({
+      final res = await supabaseClients['sys'].from('customer').insert({
         'email': email,
         'username': username,
         'salt': salt,
@@ -125,7 +133,7 @@ class Api {
       final verifiedSalt = utf8.encode(generateRandomString(18));
       final verifiedHash = sha256.convert(verifiedSalt).toString();
       // select customer row
-      final res = await client
+      final res = await supabaseClients['sys']
           .from('customer')
           .select()
           .match({'email': email})
@@ -141,7 +149,7 @@ class Api {
             body: jsonEncode({'message': 'Email has verified'}));
       }
       // update verified_hash
-      final updateRes = await client
+      final updateRes = await supabaseClients['sys']
           .from('customer')
           .update({'verified_hash': verifiedHash})
           .match({'email': email})
@@ -178,7 +186,7 @@ class Api {
         final jwt = JWT.verify(token, SecretKey(verifyEmailSecret));
         final email = jwt.payload['email'];
         final verifiedHash = jwt.payload['verified_hash'];
-        final res = await client
+        final res = await supabaseClients['sys']
             .from('customer')
             .select()
             .match({'email': email})
@@ -192,7 +200,7 @@ class Api {
           return EmailHasBeenVerifiedError.message();
         }
         // update verify status
-        final updateRes = await client
+        final updateRes = await supabaseClients['sys']
             .from('customer')
             .update({'email_verified': true})
             .match({'email': email, 'verified_hash': verifiedHash})
@@ -216,7 +224,7 @@ class Api {
       final email = payload['email'];
       final password = payload['password'];
       // hash password with salt
-      final res = await client
+      final res = await supabaseClients['sys']
           .from('customer')
           .select()
           .match({'email': email})
@@ -236,7 +244,7 @@ class Api {
         if (emailVerified) {
           // create session token
           final id = Uuid().v4();
-          final sessionRes = await client
+          final sessionRes = await supabaseClients['sys']
               .from('session')
               .insert({'id': id, 'email': email}).execute();
           if (sessionRes.hasError) {
@@ -257,11 +265,10 @@ class Api {
       if (authToken == null) {
         return UnauthorizedError.message();
       }
-      await client
+      await supabaseClients['sys']
           .from('session')
           .delete()
-          .match({'id': authToken})
-          .execute();
+          .match({'id': authToken}).execute();
       return Response.ok(null);
     });
 
@@ -271,7 +278,7 @@ class Api {
       if (authToken == null) {
         return UnauthorizedError.message();
       }
-      final res = await client
+      final res = await supabaseClients['sys']
           .from('session')
           .select()
           .match({'id': authToken})
@@ -286,35 +293,125 @@ class Api {
 
     /// ====================== TENANT ==============================
 
-    // authorize jwt
-    // late String email;
-    // try {
-    //   email = verifySessionToken(request.headers['Authorization']);
-    // } catch (e) {
-    //   return Response.badRequest(
-    //       body: jsonEncode(
-    //     {'message': 'Unauthorized'},
-    //   ));
-    // }
-
     /// Create tenant
     router.post('/api/tenants', (Request request) async {
       final authToken = request.headers['auth-token'];
       if (authToken == null) {
         return UnauthorizedError.message();
       }
+      // check whether auth-token is valid or not
+      final resSession = await supabaseClients['sys']
+          .from('session')
+          .select()
+          .match({'id': authToken})
+          .single()
+          .execute();
+      if (resSession.hasError) return UnauthorizedError.message();
+      // get customer data
+      final email = resSession.data['email'];
+      final resCustomer = await supabaseClients['sys']
+          .from('customer')
+          .select()
+          .match({'email': email})
+          .single()
+          .execute();
+      if (resCustomer.hasError) return UnauthorizedError.message();
+      final salt = resCustomer.data['salt'];
+      final hash = resCustomer.data['hash'];
+      // get domain name
       final payload =
           jsonDecode(await request.readAsString()) as Map<String, dynamic>;
       final domain = payload['domain'];
+      if (schemas.contains(domain)) {
+        return DomainHasBeenUsedError.message();
+      } else {
+        // add new schema to tenant
+        final resTenant = await supabaseClients['sys'].from('tenant').insert({
+          'id': Uuid().v4(),
+          'email': email,
+          'domain': domain,
+        }).execute();
+        if (resTenant.hasError) return UnauthorizedError.message();
+        // add domain to schemas list
+        schemas.add(domain);
+      }
       // call rpc to create new schema
-      final resSchema = await client
+      final resSchema = await supabaseClients['sys']
           .rpc('create_schema', params: {'s_name': domain}).execute();
       if (resSchema.hasError) return DatabaseError.message();
-      // call rpc to create new project table in new schema
-      final resProject = await client
+      // call rpc to create expose schema to service_role
+      final resExpose = await supabaseClients['sys'].rpc(
+          'change_postgrest_db_schemas',
+          params: {'schemas': schemas.join(', ')}).execute();
+      if (resExpose.hasError) return DatabaseError.message();
+      // CREATE TABLE
+      // USER
+      final resUser = await supabaseClients['sys']
+          .rpc('create_user', params: {'s_name': domain}).execute();
+      if (resUser.hasError) return DatabaseError.message();
+      // PROJECT
+      final resProject = await supabaseClients['sys']
           .rpc('create_project', params: {'s_name': domain}).execute();
       if (resProject.hasError) return DatabaseError.message();
+      // SESSION
+      final resTenantSession = await supabaseClients['sys']
+          .rpc('create_session', params: {'s_name': domain}).execute();
+      if (resTenantSession.hasError) return DatabaseError.message();
+      // create SupabaseClient for new schema
+      supabaseClients[domain] = createSupabaseClient(domain);
+      // add customer info to user table
+      final resAddUser = await supabaseClients[domain]
+          .from('user')
+          .insert({'email': email, 'salt': salt, 'hash': hash}).execute();
+      if (resAddUser.hasError) {
+        print(resAddUser.error);
+        return DatabaseError.message();
+      }
+
       return Response.ok(null);
+    });
+
+    /// Log in tenant
+    router.post('/api/tenant/login', (Request request) async {
+      final payload =
+          jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+      final domain = payload['domain'];
+      final email = payload['email'];
+      final password = payload['password'];
+      // check whether domain exist or not
+      if (!schemas.contains(domain)) return DomainNotExistError.message();
+      // check if supabase client on this domain
+      if (!supabaseClients.containsKey(domain)) {
+        // if not than create new supabase client
+        supabaseClients[domain] = createSupabaseClient(domain);
+      }
+      // hash password with salt
+      final res = await supabaseClients[domain]
+          .from('user')
+          .select()
+          .match({'email': email})
+          .single()
+          .execute();
+      if (res.hasError) return UserNotExistError.message();
+
+      final salt = res.data['salt'];
+      final hashDB = res.data['hash'];
+
+      final bytes = utf8.encode(password + salt);
+      final hash = sha256.convert(bytes).toString();
+      if (hash == hashDB) {
+        // create session token
+        final id = Uuid().v4();
+        final sessionRes = await supabaseClients[domain]
+            .from('session')
+            .insert({'id': id, 'email': email}).execute();
+        if (sessionRes.hasError) {
+          return EmailHasNotRegisterError.message();
+        }
+        return Response.ok(jsonEncode({'authToken': id}));
+      } else {
+        return EmailOrPasswordNotMatchedError.message();
+      }
     });
 
     // /// ====================== PROJECT ==============================
