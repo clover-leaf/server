@@ -353,8 +353,7 @@ class Api {
           .rpc('create_schema', params: {'s_name': domain}).execute();
       if (resSchema.hasError) return DatabaseError.message();
       // call rpc to create expose schema to service_role
-      final resExpose = await supabaseClient.rpc(
-          'change_postgrest_db_schemas',
+      final resExpose = await supabaseClient.rpc('change_postgrest_db_schemas',
           params: {'schemas': '$dbSchemas, $domain'}).execute();
       if (resExpose.hasError) return DatabaseError.message();
       // CREATE TABLE
@@ -427,6 +426,38 @@ class Api {
       } else {
         return EmailOrPasswordNotMatchedError.message();
       }
+    });
+
+    /// Check whether auth-token is valid
+    router.post('/api/tenant/account', (Request request) async {
+      final authToken = request.headers['auth-token'];
+      if (authToken == null) {
+        return UnauthorizedError.message();
+      }
+      final payload =
+          jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+      final domain = payload['domain'];
+      // create supabase_client for sys schema
+      // create supabase_client for sys schema
+      final supabaseClient = createSupabaseClient('sys');
+      // get db_schemas
+      final resDbSchemas = await supabaseClient.rpc('get_db_schemas').execute();
+      final dbSchemas = resDbSchemas.data.split('=')[1];
+      // check whether domain exist or not
+      if (!dbSchemas.contains(domain)) return DomainNotExistError.message();
+      // create SupabaseClient for new schema
+      final domainClient = createSupabaseClient(domain);
+      final res = await domainClient
+          .from('session')
+          .select()
+          .match({'id': authToken})
+          .single()
+          .execute();
+      if (res.hasError) {
+        return UnauthorizedError.message();
+      }
+      final email = res.data['email'];
+      return Response.ok(jsonEncode({'email': email}));
     });
 
     // /// ====================== PROJECT ==============================
