@@ -46,8 +46,10 @@ class Api {
     };
     final verifyEmailSecret = env['VERIFY_EMAIL_SECRET_KEY']!;
     const verifyEmailDuration = Duration(minutes: 5);
+    final verifyDomainSecret = env['VERIFY_DOMAIN_SECRET_KEY']!;
+    const verifyDomainDuration = Duration(days: 180);
 
-    /// ====================== AUTH ==============================
+    /// ====================== NEXTJS ==============================
 
     /// Send email to verify
     Future<bool> sendVerifiedEmail({
@@ -300,8 +302,6 @@ class Api {
       return Response.ok(jsonEncode({'email': email}));
     });
 
-    /// ====================== TENANT ==============================
-
     /// Create tenant
     router.post('/api/tenants', (Request request) async {
       final authToken = request.headers['auth-token'];
@@ -345,7 +345,7 @@ class Api {
           'email': email,
           'domain': domain,
         }).execute();
-        if (resTenant.hasError) return UnauthorizedError.message();
+        if (resTenant.hasError) return DomainHasBeenUsedError.message();
         // add domain to schemas list
       }
       // call rpc to create new schema
@@ -365,16 +365,15 @@ class Api {
       final resProject = await supabaseClient
           .rpc('create_project', params: {'s_name': domain}).execute();
       if (resProject.hasError) return DatabaseError.message();
-      // SESSION
-      final resTenantSession = await supabaseClient
-          .rpc('create_session', params: {'s_name': domain}).execute();
-      if (resTenantSession.hasError) return DatabaseError.message();
       // create SupabaseClient for new schema
       final domainClient = createSupabaseClient(domain);
       // add customer info to user table
-      final resAddUser = await domainClient
-          .from('user')
-          .insert({'email': email, 'salt': salt, 'hash': hash}).execute();
+      final resAddUser = await domainClient.from('user').insert({
+        'email': email,
+        'salt': salt,
+        'hash': hash,
+        'is_admin': true
+      }).execute();
       if (resAddUser.hasError) {
         print(resAddUser.error);
         return DatabaseError.message();
@@ -382,9 +381,47 @@ class Api {
 
       return Response.ok(null);
     });
+    
+    /// delete domain
+    router.delete('/api/tenants', (Request request) async {
+      final authToken = request.headers['auth-token'];
+      if (authToken == null) {
+        return UnauthorizedError.message();
+      }
+      // create supabase_client for sys schema
+      final supabaseClient = createSupabaseClient('sys');
+      // check whether auth-token is valid or not
+      final resSession = await supabaseClient
+          .from('session')
+          .select()
+          .match({'id': authToken})
+          .single()
+          .execute();
+      if (resSession.hasError) return UnauthorizedError.message();
+      final payload =
+          jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+      final domain = payload['domain'];
+      // call rpc to create delete schema
+      final resDel = await supabaseClient.rpc('delete_schema',
+          params: {'s_name': domain}).execute();
+      if (resDel.hasError) return DatabaseError.message();
+      // get db_schemas
+      final resDbSchemas = await supabaseClient.rpc('get_db_schemas').execute();
+      final dbSchemas = resDbSchemas.data.split('=')[1];
+      // check whether domain exist or not
+      if (!dbSchemas.contains(domain)) return DomainNotExistError.message();
+      final dbSchemas_ = dbSchemas.split(', ')..remove('fine')..join(', ');
+      final resExpose = await supabaseClient.rpc('change_postgrest_db_schemas',
+          params: {'schemas': dbSchemas_}).execute();
+      if (resExpose.hasError) return DatabaseError.message();
+
+      return Response.ok(null);
+    });
+
+    /// ====================== MOBILE ==============================
 
     /// Log in tenant
-    router.post('/api/tenant/login', (Request request) async {
+    router.post('/api/tenants/login', (Request request) async {
       final payload =
           jsonDecode(await request.readAsString()) as Map<String, dynamic>;
       final domain = payload['domain'];
@@ -414,30 +451,36 @@ class Api {
       final bytes = utf8.encode(password + salt);
       final hash = sha256.convert(bytes).toString();
       if (hash == hashDB) {
-        // create session token
-        final id = Uuid().v4();
-        final sessionRes = await domainClient
-            .from('session')
-            .insert({'id': id, 'email': email}).execute();
-        if (sessionRes.hasError) {
-          return EmailHasNotRegisterError.message();
-        }
-        return Response.ok(jsonEncode({'authToken': id}));
+        // create jwt token to confirm
+        final jwt = JWT({'email': email, 'domain': domain});
+        final token = jwt.sign(
+          SecretKey(verifyDomainSecret),
+          expiresIn: verifyDomainDuration,
+        );
+        return Response.ok(jsonEncode({'token': token}));
       } else {
         return EmailOrPasswordNotMatchedError.message();
       }
     });
 
     /// Check whether auth-token is valid
-    router.post('/api/tenant/account', (Request request) async {
-      final authToken = request.headers['auth-token'];
-      if (authToken == null) {
+    router.get('/api/tenants/account', (Request request) async {
+      final header = request.headers['Authorization'];
+      if (header == null) {
         return UnauthorizedError.message();
       }
-      final payload =
-          jsonDecode(await request.readAsString()) as Map<String, dynamic>;
-      final domain = payload['domain'];
-      // create supabase_client for sys schema
+      final ls = header.split(' ');
+      if (ls.length < 2) return UnauthorizedError.message();
+      final token = ls[1];
+      late String domain;
+      late String email;
+      try {
+        final jwt = JWT.verify(token, SecretKey(verifyEmailSecret));
+        domain = jwt.payload['domain'];
+        email = jwt.payload['email'];
+      } catch (e) {
+        return UnauthorizedError.message();
+      }
       // create supabase_client for sys schema
       final supabaseClient = createSupabaseClient('sys');
       // get db_schemas
@@ -448,16 +491,16 @@ class Api {
       // create SupabaseClient for new schema
       final domainClient = createSupabaseClient(domain);
       final res = await domainClient
-          .from('session')
+          .from('user')
           .select()
-          .match({'id': authToken})
+          .match({'email': email})
           .single()
           .execute();
       if (res.hasError) {
         return UnauthorizedError.message();
       }
-      final email = res.data['email'];
-      return Response.ok(jsonEncode({'email': email}));
+      final isAdmin = res.data['is_admin'];
+      return Response.ok(jsonEncode({'email': email, 'isAdmin': isAdmin}));
     });
 
     // /// ====================== PROJECT ==============================
