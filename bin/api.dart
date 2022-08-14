@@ -33,6 +33,16 @@ class Api {
     );
   }
 
+  /// extract jwt from header
+  /// ex: 'Bearer abc.def.ghi' => abc.def.ghi
+  String getJwt(String? header) {
+    if (header == null) throw Exception('header is null');
+    final ls = header.split(' ');
+    if (ls.length < 2) throw Exception('header lenght invalid');
+    final token = ls[1];
+    return token;
+  }
+
   Handler get handler {
     final router = Router();
 
@@ -79,7 +89,7 @@ class Api {
     }
 
     /// Sign up
-    router.post('/api/register', (Request request) async {
+    router.post('/v1/register', (Request request) async {
       final payload =
           jsonDecode(await request.readAsString()) as Map<String, dynamic>;
       final username = payload['username'];
@@ -126,7 +136,7 @@ class Api {
     });
 
     /// Resend verify email
-    router.post('/api/resend-verify', (Request request) async {
+    router.post('/v1/resend-verify', (Request request) async {
       final payload =
           jsonDecode(await request.readAsString()) as Map<String, dynamic>;
       final email = payload['email'];
@@ -181,7 +191,7 @@ class Api {
     });
 
     /// Verify email
-    router.post('/api/verify-email', (Request request) async {
+    router.post('/v1/verify-email', (Request request) async {
       final payload =
           jsonDecode(await request.readAsString()) as Map<String, dynamic>;
       final token = payload['token'];
@@ -223,7 +233,7 @@ class Api {
     });
 
     /// Log in
-    router.post('/api/login', (Request request) async {
+    router.post('/v1/login', (Request request) async {
       final payload =
           jsonDecode(await request.readAsString()) as Map<String, dynamic>;
       final email = payload['email'];
@@ -267,7 +277,7 @@ class Api {
     });
 
     /// Log out
-    router.get('/api/logout', (Request request) async {
+    router.get('/v1/logout', (Request request) async {
       final authToken = request.headers['auth-token'];
       if (authToken == null) {
         return UnauthorizedError.message();
@@ -282,7 +292,7 @@ class Api {
     });
 
     /// Get account info
-    router.get('/api/account', (Request request) async {
+    router.get('/v1/account', (Request request) async {
       final authToken = request.headers['auth-token'];
       if (authToken == null) {
         return UnauthorizedError.message();
@@ -302,8 +312,8 @@ class Api {
       return Response.ok(jsonEncode({'email': email}));
     });
 
-    /// Create tenant
-    router.post('/api/tenants', (Request request) async {
+    /// Create domain
+    router.post('/v1/domain', (Request request) async {
       final authToken = request.headers['auth-token'];
       if (authToken == null) {
         return UnauthorizedError.message();
@@ -381,9 +391,9 @@ class Api {
 
       return Response.ok(null);
     });
-    
+
     /// delete domain
-    router.delete('/api/tenants', (Request request) async {
+    router.delete('/v1/domain', (Request request) async {
       final authToken = request.headers['auth-token'];
       if (authToken == null) {
         return UnauthorizedError.message();
@@ -402,15 +412,17 @@ class Api {
           jsonDecode(await request.readAsString()) as Map<String, dynamic>;
       final domain = payload['domain'];
       // call rpc to create delete schema
-      final resDel = await supabaseClient.rpc('delete_schema',
-          params: {'s_name': domain}).execute();
+      final resDel = await supabaseClient
+          .rpc('delete_schema', params: {'s_name': domain}).execute();
       if (resDel.hasError) return DatabaseError.message();
       // get db_schemas
       final resDbSchemas = await supabaseClient.rpc('get_db_schemas').execute();
       final dbSchemas = resDbSchemas.data.split('=')[1];
       // check whether domain exist or not
       if (!dbSchemas.contains(domain)) return DomainNotExistError.message();
-      final dbSchemas_ = dbSchemas.split(', ')..remove('fine')..join(', ');
+      final dbSchemas_ = dbSchemas.split(', ')
+        ..remove('fine')
+        ..join(', ');
       final resExpose = await supabaseClient.rpc('change_postgrest_db_schemas',
           params: {'schemas': dbSchemas_}).execute();
       if (resExpose.hasError) return DatabaseError.message();
@@ -421,7 +433,7 @@ class Api {
     /// ====================== MOBILE ==============================
 
     /// Log in tenant
-    router.post('/api/tenants/login', (Request request) async {
+    router.post('/v1/domain/login', (Request request) async {
       final payload =
           jsonDecode(await request.readAsString()) as Map<String, dynamic>;
       final domain = payload['domain'];
@@ -464,46 +476,202 @@ class Api {
     });
 
     /// Check whether auth-token is valid
-    router.get('/api/tenants/account', (Request request) async {
+    router.get('/v1/domain/account', (Request request) async {
       final header = request.headers['Authorization'];
-      if (header == null) {
-        return UnauthorizedError.message();
-      }
-      final ls = header.split(' ');
-      if (ls.length < 2) return UnauthorizedError.message();
-      final token = ls[1];
-      late String domain;
-      late String email;
       try {
+        final token = getJwt(header);
         final jwt = JWT.verify(token, SecretKey(verifyEmailSecret));
-        domain = jwt.payload['domain'];
-        email = jwt.payload['email'];
+        final domain = jwt.payload['domain'];
+        final email = jwt.payload['email'];
+        // create supabase_client for sys schema
+        final supabaseClient = createSupabaseClient('sys');
+        // get db_schemas
+        final resDbSchemas =
+            await supabaseClient.rpc('get_db_schemas').execute();
+        final dbSchemas = resDbSchemas.data.split('=')[1];
+        // check whether domain exist or not
+        if (!dbSchemas.contains(domain)) return DomainNotExistError.message();
+        // create SupabaseClient for new schema
+        final domainClient = createSupabaseClient(domain);
+        final res = await domainClient
+            .from('user')
+            .select()
+            .match({'email': email})
+            .single()
+            .execute();
+        if (res.hasError) {
+          return UnauthorizedError.message();
+        }
+        final isAdmin = res.data['is_admin'];
+        return Response.ok(jsonEncode({'email': email, 'isAdmin': isAdmin}));
       } catch (e) {
         return UnauthorizedError.message();
       }
-      // create supabase_client for sys schema
-      final supabaseClient = createSupabaseClient('sys');
-      // get db_schemas
-      final resDbSchemas = await supabaseClient.rpc('get_db_schemas').execute();
-      final dbSchemas = resDbSchemas.data.split('=')[1];
-      // check whether domain exist or not
-      if (!dbSchemas.contains(domain)) return DomainNotExistError.message();
-      // create SupabaseClient for new schema
-      final domainClient = createSupabaseClient(domain);
-      final res = await domainClient
-          .from('user')
-          .select()
-          .match({'email': email})
-          .single()
-          .execute();
-      if (res.hasError) {
-        return UnauthorizedError.message();
-      }
-      final isAdmin = res.data['is_admin'];
-      return Response.ok(jsonEncode({'email': email, 'isAdmin': isAdmin}));
     });
 
-    // /// ====================== PROJECT ==============================
+    // < PROJECT REST API >
+    // POST: tạo mới một dự án
+    router.post('/v1/domain/projects', (Request request) async {
+      final header = request.headers['Authorization'];
+      try {
+        final token = getJwt(header);
+        final jwt = JWT.verify(token, SecretKey(verifyEmailSecret));
+        final domain = jwt.payload['domain'];
+        // create supabase_client for sys schema
+        final supabaseClient = createSupabaseClient('sys');
+        // get db_schemas
+        final resDbSchemas =
+            await supabaseClient.rpc('get_db_schemas').execute();
+        final dbSchemas = resDbSchemas.data.split('=')[1];
+        // check whether domain exist or not
+        if (!dbSchemas.contains(domain)) return DomainNotExistError.message();
+        // create SupabaseClient for new schema
+        final domainClient = createSupabaseClient(domain);
+        // get name of project
+        final payload =
+            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final id = Uuid().v4();
+        final name = payload['name'];
+        final res = await domainClient
+            .from('project')
+            .insert({'id': id, 'name': name}).execute();
+        if (res.hasError) {
+          return DatabaseError.message();
+        }
+        return Response.ok(jsonEncode({'id': id, 'name': name}));
+      } catch (e) {
+        return UnauthorizedError.message();
+      }
+    });
+
+    // GET: lấy danh sách dự án
+    router.get('/v1/domain/projects', (Request request) async {
+      final header = request.headers['Authorization'];
+      try {
+        final token = getJwt(header);
+        final jwt = JWT.verify(token, SecretKey(verifyEmailSecret));
+        final domain = jwt.payload['domain'];
+        // create supabase_client for sys schema
+        final supabaseClient = createSupabaseClient('sys');
+        // get db_schemas
+        final resDbSchemas =
+            await supabaseClient.rpc('get_db_schemas').execute();
+        final dbSchemas = resDbSchemas.data.split('=')[1];
+        // check whether domain exist or not
+        if (!dbSchemas.contains(domain)) return DomainNotExistError.message();
+        // create SupabaseClient for new schema
+        final domainClient = createSupabaseClient(domain);
+        // get name of project
+        final res = await domainClient.from('project').select().execute();
+        if (res.hasError) {
+          return DatabaseError.message();
+        }
+        return Response.ok(jsonEncode({'projects': res.data}));
+      } catch (e) {
+        return UnauthorizedError.message();
+      }
+    });
+
+    // GET: lấy chi tiết dự án với id cụ thể
+    router.get('/v1/domain/projects/<project_id>',
+        (Request request, String projectID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final token = getJwt(header);
+        final jwt = JWT.verify(token, SecretKey(verifyEmailSecret));
+        final domain = jwt.payload['domain'];
+        // create supabase_client for sys schema
+        final supabaseClient = createSupabaseClient('sys');
+        // get db_schemas
+        final resDbSchemas =
+            await supabaseClient.rpc('get_db_schemas').execute();
+        final dbSchemas = resDbSchemas.data.split('=')[1];
+        // check whether domain exist or not
+        if (!dbSchemas.contains(domain)) return DomainNotExistError.message();
+        // create SupabaseClient for new schema
+        final domainClient = createSupabaseClient(domain);
+        // get name of project
+        final res = await domainClient
+            .from('project')
+            .select()
+            .match({'id': projectID})
+            .single()
+            .execute();
+        if (res.hasError) {
+          return ProjectNotExistError.message();
+        }
+        return Response.ok(jsonEncode(res.data));
+      } catch (e) {
+        print(e);
+        return UnauthorizedError.message();
+      }
+    });
+
+    // PUT: cập nhật dự án với id cụ thể
+    router.put('/v1/domain/projects/<project_id>',
+        (Request request, String projectID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final token = getJwt(header);
+        final jwt = JWT.verify(token, SecretKey(verifyEmailSecret));
+        final domain = jwt.payload['domain'];
+        // create supabase_client for sys schema
+        final supabaseClient = createSupabaseClient('sys');
+        // get db_schemas
+        final resDbSchemas =
+            await supabaseClient.rpc('get_db_schemas').execute();
+        final dbSchemas = resDbSchemas.data.split('=')[1];
+        // check whether domain exist or not
+        if (!dbSchemas.contains(domain)) return DomainNotExistError.message();
+        // create SupabaseClient for new schema
+        final domainClient = createSupabaseClient(domain);
+        // get name of project
+        final payload =
+            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final name = payload['name'];
+        final res = await domainClient
+            .from('project')
+            .update({'name': name}).match({'id': projectID}).execute();
+        if (res.hasError) {
+          return ProjectNotExistError.message();
+        }
+        return Response.ok(jsonEncode({'id': projectID, 'name': name}));
+      } catch (e) {
+        return UnauthorizedError.message();
+      }
+    });
+
+    // DELETE: xóa dự án với id cụ thể
+    router.delete('/v1/domain/projects/<project_id>',
+        (Request request, String projectID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final token = getJwt(header);
+        final jwt = JWT.verify(token, SecretKey(verifyEmailSecret));
+        final domain = jwt.payload['domain'];
+        // create supabase_client for sys schema
+        final supabaseClient = createSupabaseClient('sys');
+        // get db_schemas
+        final resDbSchemas =
+            await supabaseClient.rpc('get_db_schemas').execute();
+        final dbSchemas = resDbSchemas.data.split('=')[1];
+        // check whether domain exist or not
+        if (!dbSchemas.contains(domain)) return DomainNotExistError.message();
+        // create SupabaseClient for new schema
+        final domainClient = createSupabaseClient(domain);
+        final res = await domainClient
+            .from('project')
+            .delete()
+            .match({'id': projectID}).execute();
+        if (res.hasError) {
+          return ProjectNotExistError.message();
+        }
+        return Response.ok(null);
+      } catch (e) {
+        return UnauthorizedError.message();
+      }
+    });
+    // </ PROJECT REST API >
 
     // /// Get all project
     // router.get('/api/projects', (Request request) async {
