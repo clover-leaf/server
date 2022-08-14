@@ -756,7 +756,7 @@ class Api {
         if (res.hasError) {
           return DatabaseError.message();
         }
-        return Response.ok(jsonEncode({'group': res.data}));
+        return Response.ok(jsonEncode({'groups': res.data}));
       } catch (e) {
         return UnauthorizedError.message();
       }
@@ -934,7 +934,7 @@ class Api {
         if (res.hasError) {
           return DatabaseError.message();
         }
-        return Response.ok(jsonEncode({'group': res.data}));
+        return Response.ok(jsonEncode({'devices': res.data}));
       } catch (e) {
         return UnauthorizedError.message();
       }
