@@ -102,6 +102,20 @@ class ProjectNotExistError {
   }
 }
 
+class GroupNotExistError {
+  static Response message() {
+    return Response(404,
+        body: jsonEncode({'message': 'This group not exist'}));
+  }
+}
+
+class DeviceNotExistError {
+  static Response message() {
+    return Response(404,
+        body: jsonEncode({'message': 'This device not exist'}));
+  }
+}
+
 class DatabaseError {
   static Response message() {
     return Response(404,

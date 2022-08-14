@@ -347,6 +347,7 @@ class Api {
       final resDbSchemas = await supabaseClient.rpc('get_db_schemas').execute();
       final dbSchemas = resDbSchemas.data.split('=')[1];
       if (dbSchemas.contains(domain)) {
+        print(resDbSchemas.data);
         return DomainHasBeenUsedError.message();
       } else {
         // add new schema to tenant
@@ -355,7 +356,9 @@ class Api {
           'email': email,
           'domain': domain,
         }).execute();
-        if (resTenant.hasError) return DomainHasBeenUsedError.message();
+        if (resTenant.hasError) {
+          return DomainHasBeenUsedError.message();
+        }
         // add domain to schemas list
       }
       // call rpc to create new schema
@@ -375,6 +378,14 @@ class Api {
       final resProject = await supabaseClient
           .rpc('create_project', params: {'s_name': domain}).execute();
       if (resProject.hasError) return DatabaseError.message();
+      // GROUP
+      final resGroup = await supabaseClient
+          .rpc('create_group', params: {'s_name': domain}).execute();
+      if (resGroup.hasError) return DatabaseError.message();
+      // DEVICE
+      final resDevice = await supabaseClient
+          .rpc('create_device', params: {'s_name': domain}).execute();
+      if (resDevice.hasError) return DatabaseError.message();
       // create SupabaseClient for new schema
       final domainClient = createSupabaseClient(domain);
       // add customer info to user table
@@ -415,16 +426,21 @@ class Api {
       final resDel = await supabaseClient
           .rpc('delete_schema', params: {'s_name': domain}).execute();
       if (resDel.hasError) return DatabaseError.message();
+      // delete row in tenant
+      final resTenant = await supabaseClient
+          .from('tenant')
+          .delete()
+          .match({'domain': domain}).execute();
+      if (resTenant.hasError) return DatabaseError.message();
       // get db_schemas
       final resDbSchemas = await supabaseClient.rpc('get_db_schemas').execute();
       final dbSchemas = resDbSchemas.data.split('=')[1];
       // check whether domain exist or not
       if (!dbSchemas.contains(domain)) return DomainNotExistError.message();
-      final dbSchemas_ = dbSchemas.split(', ')
-        ..remove('fine')
-        ..join(', ');
+      final schemas = dbSchemas.split(', ')..remove(domain);
+      final dbSchemasUpdate = schemas.join(', ');
       final resExpose = await supabaseClient.rpc('change_postgrest_db_schemas',
-          params: {'schemas': dbSchemas_}).execute();
+          params: {'schemas': dbSchemasUpdate}).execute();
       if (resExpose.hasError) return DatabaseError.message();
 
       return Response.ok(null);
@@ -672,6 +688,358 @@ class Api {
       }
     });
     // </ PROJECT REST API >
+
+    // < GROUP REST API >
+    // POST: tạo mới một nhóm
+    router.post('/v1/domain/groups', (Request request) async {
+      final header = request.headers['Authorization'];
+      try {
+        final token = getJwt(header);
+        final jwt = JWT.verify(token, SecretKey(verifyEmailSecret));
+        final domain = jwt.payload['domain'];
+        // create supabase_client for sys schema
+        final supabaseClient = createSupabaseClient('sys');
+        // get db_schemas
+        final resDbSchemas =
+            await supabaseClient.rpc('get_db_schemas').execute();
+        final dbSchemas = resDbSchemas.data.split('=')[1];
+        // check whether domain exist or not
+        if (!dbSchemas.contains(domain)) return DomainNotExistError.message();
+        // create SupabaseClient for new schema
+        final domainClient = createSupabaseClient(domain);
+        // get name of project
+        final payload =
+            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final id = Uuid().v4();
+        final projectID = payload['project_id'];
+        final groupID = payload['group_id'];
+        final name = payload['name'];
+        final res = await domainClient.from('group').insert({
+          'id': id,
+          'project_id': projectID,
+          'group_id': groupID,
+          'name': name,
+        }).execute();
+        if (res.hasError) {
+          return DatabaseError.message();
+        }
+        return Response.ok(jsonEncode({
+          'id': id,
+          'project_id': projectID,
+          'group_id': groupID,
+          'name': name,
+        }));
+      } catch (e) {
+        return UnauthorizedError.message();
+      }
+    });
+
+    // GET: lấy danh sách nhóm
+    router.get('/v1/domain/groups', (Request request) async {
+      final header = request.headers['Authorization'];
+      try {
+        final token = getJwt(header);
+        final jwt = JWT.verify(token, SecretKey(verifyEmailSecret));
+        final domain = jwt.payload['domain'];
+        // create supabase_client for sys schema
+        final supabaseClient = createSupabaseClient('sys');
+        // get db_schemas
+        final resDbSchemas =
+            await supabaseClient.rpc('get_db_schemas').execute();
+        final dbSchemas = resDbSchemas.data.split('=')[1];
+        // check whether domain exist or not
+        if (!dbSchemas.contains(domain)) return DomainNotExistError.message();
+        // create SupabaseClient for new schema
+        final domainClient = createSupabaseClient(domain);
+        // get name of project
+        final res = await domainClient.from('group').select().execute();
+        if (res.hasError) {
+          return DatabaseError.message();
+        }
+        return Response.ok(jsonEncode({'group': res.data}));
+      } catch (e) {
+        return UnauthorizedError.message();
+      }
+    });
+
+    // GET: lấy chi tiết nhóm với id cụ thể
+    router.get('/v1/domain/groups/<group_id>',
+        (Request request, String groupID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final token = getJwt(header);
+        final jwt = JWT.verify(token, SecretKey(verifyEmailSecret));
+        final domain = jwt.payload['domain'];
+        // create supabase_client for sys schema
+        final supabaseClient = createSupabaseClient('sys');
+        // get db_schemas
+        final resDbSchemas =
+            await supabaseClient.rpc('get_db_schemas').execute();
+        final dbSchemas = resDbSchemas.data.split('=')[1];
+        // check whether domain exist or not
+        if (!dbSchemas.contains(domain)) return DomainNotExistError.message();
+        // create SupabaseClient for new schema
+        final domainClient = createSupabaseClient(domain);
+        // get name of project
+        final res = await domainClient
+            .from('group')
+            .select()
+            .match({'id': groupID})
+            .single()
+            .execute();
+        if (res.hasError) {
+          return GroupNotExistError.message();
+        }
+        return Response.ok(jsonEncode(res.data));
+      } catch (e) {
+        print(e);
+        return UnauthorizedError.message();
+      }
+    });
+
+    // PUT: cập nhật nhóm với id cụ thể
+    router.put('/v1/domain/groups/<group_id>',
+        (Request request, String id) async {
+      final header = request.headers['Authorization'];
+      try {
+        final token = getJwt(header);
+        final jwt = JWT.verify(token, SecretKey(verifyEmailSecret));
+        final domain = jwt.payload['domain'];
+        // create supabase_client for sys schema
+        final supabaseClient = createSupabaseClient('sys');
+        // get db_schemas
+        final resDbSchemas =
+            await supabaseClient.rpc('get_db_schemas').execute();
+        final dbSchemas = resDbSchemas.data.split('=')[1];
+        // check whether domain exist or not
+        if (!dbSchemas.contains(domain)) return DomainNotExistError.message();
+        // create SupabaseClient for new schema
+        final domainClient = createSupabaseClient(domain);
+        // get name of project
+        final payload =
+            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final projectID = payload['project_id'];
+        final groupID = payload['group_id'];
+        final name = payload['name'];
+        final res = await domainClient.from('group').update({
+          'project_id': projectID,
+          'group_id': groupID,
+          'name': name,
+        }).match({'id': id}).execute();
+        if (res.hasError) return GroupNotExistError.message();
+        return Response.ok(jsonEncode({
+          'id': id,
+          'project_id': projectID,
+          'group_id': groupID,
+          'name': name,
+        }));
+      } catch (e) {
+        return UnauthorizedError.message();
+      }
+    });
+
+    // DELETE: xóa nhóm với id cụ thể
+    router.delete('/v1/domain/groups/<group_id>',
+        (Request request, String groupID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final token = getJwt(header);
+        final jwt = JWT.verify(token, SecretKey(verifyEmailSecret));
+        final domain = jwt.payload['domain'];
+        // create supabase_client for sys schema
+        final supabaseClient = createSupabaseClient('sys');
+        // get db_schemas
+        final resDbSchemas =
+            await supabaseClient.rpc('get_db_schemas').execute();
+        final dbSchemas = resDbSchemas.data.split('=')[1];
+        // check whether domain exist or not
+        if (!dbSchemas.contains(domain)) return DomainNotExistError.message();
+        // create SupabaseClient for new schema
+        final domainClient = createSupabaseClient(domain);
+        final res = await domainClient
+            .from('group')
+            .delete()
+            .match({'id': groupID}).execute();
+        if (res.hasError) {
+          return GroupNotExistError.message();
+        }
+        return Response.ok(null);
+      } catch (e) {
+        return UnauthorizedError.message();
+      }
+    });
+    // </ GROUP REST API >
+
+    // < DEVICE REST API >
+    // POST: tạo mới một thiết bị
+    router.post('/v1/domain/devices', (Request request) async {
+      final header = request.headers['Authorization'];
+      try {
+        final token = getJwt(header);
+        final jwt = JWT.verify(token, SecretKey(verifyEmailSecret));
+        final domain = jwt.payload['domain'];
+        // create supabase_client for sys schema
+        final supabaseClient = createSupabaseClient('sys');
+        // get db_schemas
+        final resDbSchemas =
+            await supabaseClient.rpc('get_db_schemas').execute();
+        final dbSchemas = resDbSchemas.data.split('=')[1];
+        // check whether domain exist or not
+        if (!dbSchemas.contains(domain)) return DomainNotExistError.message();
+        // create SupabaseClient for new schema
+        final domainClient = createSupabaseClient(domain);
+        // get name of project
+        final payload =
+            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final id = Uuid().v4();
+        final groupID = payload['group_id'];
+        final name = payload['name'];
+        final res = await domainClient.from('device').insert({
+          'id': id,
+          'group_id': groupID,
+          'name': name,
+        }).execute();
+        if (res.hasError) {
+          return DatabaseError.message();
+        }
+        return Response.ok(jsonEncode({
+          'id': id,
+          'group_id': groupID,
+          'name': name,
+        }));
+      } catch (e) {
+        return UnauthorizedError.message();
+      }
+    });
+
+    // GET: lấy danh sách thiết bị
+    router.get('/v1/domain/devices', (Request request) async {
+      final header = request.headers['Authorization'];
+      try {
+        final token = getJwt(header);
+        final jwt = JWT.verify(token, SecretKey(verifyEmailSecret));
+        final domain = jwt.payload['domain'];
+        // create supabase_client for sys schema
+        final supabaseClient = createSupabaseClient('sys');
+        // get db_schemas
+        final resDbSchemas =
+            await supabaseClient.rpc('get_db_schemas').execute();
+        final dbSchemas = resDbSchemas.data.split('=')[1];
+        // check whether domain exist or not
+        if (!dbSchemas.contains(domain)) return DomainNotExistError.message();
+        // create SupabaseClient for new schema
+        final domainClient = createSupabaseClient(domain);
+        // get name of project
+        final res = await domainClient.from('device').select().execute();
+        if (res.hasError) {
+          return DatabaseError.message();
+        }
+        return Response.ok(jsonEncode({'group': res.data}));
+      } catch (e) {
+        return UnauthorizedError.message();
+      }
+    });
+
+    // GET: lấy chi tiết thiết bị với id cụ thể
+    router.get('/v1/domain/devices/<device_id>',
+        (Request request, String deviceID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final token = getJwt(header);
+        final jwt = JWT.verify(token, SecretKey(verifyEmailSecret));
+        final domain = jwt.payload['domain'];
+        // create supabase_client for sys schema
+        final supabaseClient = createSupabaseClient('sys');
+        // get db_schemas
+        final resDbSchemas =
+            await supabaseClient.rpc('get_db_schemas').execute();
+        final dbSchemas = resDbSchemas.data.split('=')[1];
+        // check whether domain exist or not
+        if (!dbSchemas.contains(domain)) return DomainNotExistError.message();
+        // create SupabaseClient for new schema
+        final domainClient = createSupabaseClient(domain);
+        // get name of project
+        final res = await domainClient
+            .from('device')
+            .select()
+            .match({'id': deviceID})
+            .single()
+            .execute();
+        if (res.hasError) return DeviceNotExistError.message();
+        return Response.ok(jsonEncode(res.data));
+      } catch (e) {
+        print(e);
+        return UnauthorizedError.message();
+      }
+    });
+
+    // PUT: cập nhật thiết bị với id cụ thể
+    router.put('/v1/domain/devices/<device_id>',
+        (Request request, String deviceID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final token = getJwt(header);
+        final jwt = JWT.verify(token, SecretKey(verifyEmailSecret));
+        final domain = jwt.payload['domain'];
+        // create supabase_client for sys schema
+        final supabaseClient = createSupabaseClient('sys');
+        // get db_schemas
+        final resDbSchemas =
+            await supabaseClient.rpc('get_db_schemas').execute();
+        final dbSchemas = resDbSchemas.data.split('=')[1];
+        // check whether domain exist or not
+        if (!dbSchemas.contains(domain)) return DomainNotExistError.message();
+        // create SupabaseClient for new schema
+        final domainClient = createSupabaseClient(domain);
+        // get name of project
+        final payload =
+            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final groupID = payload['group_id'];
+        final name = payload['name'];
+        final res = await domainClient.from('device').update({
+          'group_id': groupID,
+          'name': name,
+        }).match({'id': deviceID}).execute();
+        if (res.hasError) return DeviceNotExistError.message();
+        return Response.ok(jsonEncode({
+          'id': deviceID,
+          'group_id': groupID,
+          'name': name,
+        }));
+      } catch (e) {
+        return UnauthorizedError.message();
+      }
+    });
+
+    // DELETE: xóa thiết bị với id cụ thể
+    router.delete('/v1/domain/devices/<device_id>',
+        (Request request, String deviceID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final token = getJwt(header);
+        final jwt = JWT.verify(token, SecretKey(verifyEmailSecret));
+        final domain = jwt.payload['domain'];
+        // create supabase_client for sys schema
+        final supabaseClient = createSupabaseClient('sys');
+        // get db_schemas
+        final resDbSchemas =
+            await supabaseClient.rpc('get_db_schemas').execute();
+        final dbSchemas = resDbSchemas.data.split('=')[1];
+        // check whether domain exist or not
+        if (!dbSchemas.contains(domain)) return DomainNotExistError.message();
+        // create SupabaseClient for new schema
+        final domainClient = createSupabaseClient(domain);
+        final res = await domainClient
+            .from('device')
+            .delete()
+            .match({'id': deviceID}).execute();
+        if (res.hasError) return DeviceNotExistError.message();
+        return Response.ok(null);
+      } catch (e) {
+        return UnauthorizedError.message();
+      }
+    });
+    // </ GROUP REST API >
 
     // /// Get all project
     // router.get('/api/projects', (Request request) async {
