@@ -1018,7 +1018,7 @@ class Api {
       }
     });
 
-    // DELETE: xóa thiết bị với id cụ thể
+    // DELETE: xóa điểm giao với id cụ thể
     router.delete('/v1/domain/brokers/<broker_id>',
         (Request request, String brokerID) async {
       final header = request.headers['Authorization'];
@@ -1030,6 +1030,131 @@ class Api {
             .from('broker')
             .delete()
             .match({'id': brokerID}).execute();
+        if (res.hasError) return DeviceNotExistError.message();
+        return Response.ok(null);
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+    // ================== BROKER REST API ========================
+
+    // ================== ATTRIBUTE REST API ========================
+    // POST: tạo mới một thuộc tính
+    router.post('/v1/domain/attributes', (Request request) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        // decode request payload
+        final payload =
+            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final id = payload['id'];
+        final deviceID = payload['device_id'];
+        final name = payload['name'];
+        final jsonPath = payload['json_path'];
+        final res = await domainClient.from('attribute').insert({
+          'id': id,
+          'device_id': deviceID,
+          'name': name,
+          'json_path': jsonPath,
+        }).execute();
+        if (res.hasError) return DatabaseError.message();
+        return Response.ok(jsonEncode({
+          'id': id,
+          'device_id': deviceID,
+          'name': name,
+          'json_path': jsonPath,
+        }));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+
+    // GET: lấy danh sách thuộc tính
+    router.get('/v1/domain/attributes', (Request request) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient.from('attribute').select().execute();
+        if (res.hasError) {
+          return DatabaseError.message();
+        }
+        return Response.ok(jsonEncode({'attributes': res.data}));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+
+    // GET: lấy chi tiết thuộc tính với id cụ thể
+    router.get('/v1/domain/attributes/<attribute_id>',
+        (Request request, String attributeID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient
+            .from('attribute')
+            .select()
+            .match({'id': attributeID})
+            .single()
+            .execute();
+        if (res.hasError) return DeviceNotExistError.message();
+        return Response.ok(jsonEncode(res.data));
+      } catch (e) {
+        print(e);
+        return UnknownError.message();
+      }
+    });
+
+    // PUT: cập nhật thuộc tính với id cụ thể
+    router.put('/v1/domain/attributes/<attribute_id>',
+        (Request request, String attributeID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        // decode request payload
+        final payload =
+            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final id = payload['id'];
+        final deviceID = payload['device_id'];
+        final name = payload['name'];
+        final jsonPath = payload['json_path'];
+        final res = await domainClient.from('attribute').update({
+          'id': id,
+          'device_id': deviceID,
+          'name': name,
+          'json_path': jsonPath,
+        }).match({'id': attributeID}).execute();
+        if (res.hasError) return DeviceNotExistError.message();
+        return Response.ok(jsonEncode({
+          'id': id,
+          'device_id': deviceID,
+          'name': name,
+          'json_path': jsonPath,
+        }));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+
+    // DELETE: xóa thuộc tính với id cụ thể
+    router.delete('/v1/domain/attributes/<attribute_id>',
+        (Request request, String attributeID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient
+            .from('attribute')
+            .delete()
+            .match({'id': attributeID}).execute();
         if (res.hasError) return DeviceNotExistError.message();
         return Response.ok(null);
       } catch (e) {
