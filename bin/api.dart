@@ -543,7 +543,7 @@ class Api {
       }
     });
 
-    // < PROJECT REST API >
+    // ================== PROJECT REST API ========================
     // POST: tạo mới một dự án
     router.post('/v1/domain/projects', (Request request) async {
       final header = request.headers['Authorization'];
@@ -645,9 +645,9 @@ class Api {
         return UnknownError.message();
       }
     });
-    // </ PROJECT REST API >
+    // ================== PROJECT REST API ========================
 
-    // < GROUP REST API >
+    // ================== GROUP REST API ========================
     // POST: tạo mới một nhóm
     router.post('/v1/domain/groups', (Request request) async {
       final header = request.headers['Authorization'];
@@ -766,12 +766,11 @@ class Api {
         return UnknownError.message();
       }
     });
-    // </ GROUP REST API >
+    // ================== GROUP REST API ========================
 
-    // < BROKER REST API >
-
+    // ================== DEVICE REST API ========================
     // POST: tạo mới một thiết bị
-    router.post('/v1/domain/brokers', (Request request) async {
+    router.post('/v1/domain/devices', (Request request) async {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
@@ -902,7 +901,142 @@ class Api {
         return UnknownError.message();
       }
     });
-    // </ BROKER REST API >
+    // ================== DEVICE REST API ========================
+
+    // ================== BROKER REST API ========================
+    // POST: tạo mới một diểm giao
+    router.post('/v1/domain/brokers', (Request request) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        // decode request payload
+        final payload =
+            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final id = payload['id'];
+        final groupID = payload['group_id'];
+        final name = payload['name'];
+        final url = payload['url'];
+        final account = payload['account'];
+        final password = payload['password'];
+        final res = await domainClient.from('broker').insert({
+          'id': id,
+          'group_id': groupID,
+          'name': name,
+          'url': url,
+          'account': account,
+          'password': password,
+        }).execute();
+        if (res.hasError) return DatabaseError.message();
+        return Response.ok(jsonEncode({
+          'id': id,
+          'group_id': groupID,
+          'name': name,
+          'url': url,
+          'account': account,
+          'password': password,
+        }));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+
+    // GET: lấy danh sách điểm giao
+    router.get('/v1/domain/brokers', (Request request) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient.from('broker').select().execute();
+        if (res.hasError) {
+          return DatabaseError.message();
+        }
+        return Response.ok(jsonEncode({'brokers': res.data}));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+
+    // GET: lấy chi tiết điểm giao với id cụ thể
+    router.get('/v1/domain/brokers/<broker_id>',
+        (Request request, String brokerID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient
+            .from('broker')
+            .select()
+            .match({'id': brokerID})
+            .single()
+            .execute();
+        if (res.hasError) return DeviceNotExistError.message();
+        return Response.ok(jsonEncode(res.data));
+      } catch (e) {
+        print(e);
+        return UnknownError.message();
+      }
+    });
+
+    // PUT: cập nhật điểm giao với id cụ thể
+    router.put('/v1/domain/brokers/<broker_id>',
+        (Request request, String brokerID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        // decode request payload
+        final payload =
+            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final groupID = payload['group_id'];
+        final name = payload['name'];
+        final url = payload['url'];
+        final account = payload['account'];
+        final password = payload['password'];
+        final res = await domainClient.from('broker').update({
+          'group_id': groupID,
+          'name': name,
+          'url': url,
+          'account': account,
+          'password': password,
+        }).match({'id': brokerID}).execute();
+        if (res.hasError) return DeviceNotExistError.message();
+        return Response.ok(jsonEncode({
+          'id': brokerID,
+          'group_id': groupID,
+          'name': name,
+          'url': url,
+          'account': account,
+          'password': password,
+        }));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+
+    // DELETE: xóa thiết bị với id cụ thể
+    router.delete('/v1/domain/brokers/<broker_id>',
+        (Request request, String brokerID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient
+            .from('broker')
+            .delete()
+            .match({'id': brokerID}).execute();
+        if (res.hasError) return DeviceNotExistError.message();
+        return Response.ok(null);
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+    // ================== DEVICE REST API ========================
 
     // /// Get all project
     // router.get('/api/projects', (Request request) async {
