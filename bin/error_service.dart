@@ -123,3 +123,13 @@ class DatabaseError {
             {'message': 'There is something wrong happened with Database'}));
   }
 }
+
+class UnknownError {
+  static Response message() {
+    return Response(404,
+        body: jsonEncode(
+            {'message': 'Unknown error happened'}));
+  }
+}
+
+
