@@ -476,7 +476,8 @@ class Api {
 
     /// ====================== MOBILE ==============================
 
-    /// Log in tenant
+    /// POST: đăng nhập vào domain
+    /// trả về jwt 
     router.post('/v1/domain/login', (Request request) async {
       final payload =
           jsonDecode(await request.readAsString()) as Map<String, dynamic>;
@@ -519,8 +520,8 @@ class Api {
       }
     });
 
-    /// Get user info
-    router.get('/v1/domain/users', (Request request) async {
+    /// GET: lấy thông tin tài khoản của JWT
+    router.get('/v1/domain/user', (Request request) async {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
@@ -670,7 +671,7 @@ class Api {
         return UnknownError.message();
       }
     });
-    // ================== PROJECT REST API ========================
+    // ================== USER REST API ========================
 
     // ================== PROJECT REST API ========================
     // POST: tạo mới một dự án
