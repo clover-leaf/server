@@ -546,7 +546,7 @@ class Api {
         // get name of project
         final payload =
             jsonDecode(await request.readAsString()) as Map<String, dynamic>;
-        final id = Uuid().v4();
+        final id = payload['id'];
         final name = payload['name'];
         final res = await domainClient
             .from('project')
@@ -710,7 +710,7 @@ class Api {
         // get name of project
         final payload =
             jsonDecode(await request.readAsString()) as Map<String, dynamic>;
-        final id = Uuid().v4();
+        final id = payload['id'];
         final projectID = payload['project_id'];
         final groupID = payload['group_id'];
         final name = payload['name'];
@@ -754,6 +754,7 @@ class Api {
         // get name of project
         final res = await domainClient.from('group').select().execute();
         if (res.hasError) {
+          print(res.error);
           return DatabaseError.message();
         }
         return Response.ok(jsonEncode({'groups': res.data}));
@@ -891,7 +892,7 @@ class Api {
         // get name of project
         final payload =
             jsonDecode(await request.readAsString()) as Map<String, dynamic>;
-        final id = Uuid().v4();
+        final id = payload['id'];
         final groupID = payload['group_id'];
         final name = payload['name'];
         final res = await domainClient.from('device').insert({
