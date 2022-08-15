@@ -519,8 +519,8 @@ class Api {
       }
     });
 
-    /// Check whether auth-token is valid
-    router.get('/v1/domain/account', (Request request) async {
+    /// Get user info
+    router.get('/v1/domain/users', (Request request) async {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
@@ -542,6 +542,135 @@ class Api {
         return UnknownError.message();
       }
     });
+
+    // ================== USER REST API ========================
+    // POST: tạo mới một tài khoản người dùng
+    router.post('/v1/domain/users', (Request request) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        // decode request payload
+        final payload =
+            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final email = payload['email'];
+        final password = payload['password'];
+        // hash password with salt
+        final salt = generateRandomString(6);
+        final bytes = utf8.encode(password + salt);
+        final hash = sha256.convert(bytes).toString();
+        final res = await domainClient.from('user').insert({
+          'email': email,
+          'salt': salt,
+          'hash': hash,
+          'is_admin': false,
+        }).execute();
+        if (res.hasError) return DatabaseError.message();
+        return Response.ok(jsonEncode({
+          'email': email,
+          'salt': salt,
+          'hash': hash,
+          'is_admin': false,
+        }));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+
+    // GET: lấy danh sách tài khoản người dùng
+    router.get('/v1/domain/users', (Request request) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        // get name of project
+        final res = await domainClient.from('project').select().execute();
+        if (res.hasError) return DatabaseError.message();
+        return Response.ok(jsonEncode({'projects': res.data}));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+
+    // GET: lấy chi tiết tài khoản người dùng với email cụ thể
+    router.get('/v1/domain/users/<email>',
+        (Request request, String email) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        // get name of user
+        final res = await domainClient
+            .from('user')
+            .select()
+            .match({'email': email})
+            .single()
+            .execute();
+        if (res.hasError) return ProjectNotExistError.message();
+        return Response.ok(jsonEncode(res.data));
+      } catch (e) {
+        print(e);
+        return UnknownError.message();
+      }
+    });
+
+    // PUT: cập nhật tài khoản người dùng với email cụ thể
+    router.put('/v1/domain/users/<email>',
+        (Request request, String email) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        // decode request payload
+        final payload =
+            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final email = payload['email'];
+        final password = payload['password'];
+        // hash password with salt
+        final salt = generateRandomString(6);
+        final bytes = utf8.encode(password + salt);
+        final hash = sha256.convert(bytes).toString();
+        final res = await domainClient.from('user').update({
+          'email': email,
+          'salt': salt,
+          'hash': hash,
+          'is_admin': false,
+        }).match({'email': email}).execute();
+        if (res.hasError) return ProjectNotExistError.message();
+        return Response.ok(jsonEncode({
+          'email': email,
+          'salt': salt,
+          'hash': hash,
+          'is_admin': false,
+        }));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+
+    // DELETE: xóa tài khoản người dùng với email cụ thể
+    router.delete('/v1/domain/users/<email>',
+        (Request request, String email) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient
+            .from('user')
+            .delete()
+            .match({'email': email}).execute();
+        if (res.hasError) return ProjectNotExistError.message();
+        return Response.ok(null);
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+    // ================== PROJECT REST API ========================
 
     // ================== PROJECT REST API ========================
     // POST: tạo mới một dự án
