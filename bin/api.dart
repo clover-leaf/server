@@ -1027,18 +1027,12 @@ class Api {
         if (isUserJwt(jwtPayload)) {
           // is user
           final resJoin = await domainClient
-              .rpc('join_user_project', params: {'s_name': domain}).execute();
+              .rpc('join_user_group', params: {'s_name': domain}).execute();
           if (resJoin.hasError) return DatabaseError.message();
           final joinTable = resJoin.data as List<dynamic>;
           final userID = jwtPayload['id'];
-          final resGroup = await domainClient.from('group').select().execute();
-          if (resGroup.hasError) return DatabaseError.message();
-          final showProjectID = joinTable
+          final showGroup = joinTable
               .where((row) => row['user_id'] == userID)
-              .map((row) => row['project_id']);
-          final allGroup = resGroup.data as List<dynamic>;
-          final showGroup = allGroup
-              .where((row) => showProjectID.contains(row['project_id']))
               .toList();
           return Response.ok(jsonEncode({'groups': showGroup}));
         } else {
