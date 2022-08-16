@@ -1267,23 +1267,26 @@ class Api {
         final payload =
             jsonDecode(await request.readAsString()) as Map<String, dynamic>;
         final id = payload['id'];
-        final groupID = payload['group_id'];
+        final projectID = payload['project_id'];
         final name = payload['name'];
         final url = payload['url'];
         final account = payload['account'];
         final password = payload['password'];
         final res = await domainClient.from('broker').insert({
           'id': id,
-          'group_id': groupID,
+          'project_id': projectID,
           'name': name,
           'url': url,
           'account': account,
           'password': password,
         }).execute();
-        if (res.hasError) return DatabaseError.message();
+        if (res.hasError) {
+          print(res.error);
+          return DatabaseError.message();
+        }
         return Response.ok(jsonEncode({
           'id': id,
-          'group_id': groupID,
+          'project_id': projectID,
           'name': name,
           'url': url,
           'account': account,
