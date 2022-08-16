@@ -116,6 +116,21 @@ class DeviceNotExistError {
   }
 }
 
+class BrokerNotExistError {
+  static Response message() {
+    return Response(404,
+        body: jsonEncode({'message': 'This broker not exist'}));
+  }
+}
+
+class AttributeNotExistError {
+  static Response message() {
+    return Response(404,
+        body: jsonEncode({'message': 'This attribute not exist'}));
+  }
+}
+
+
 class DatabaseError {
   static Response message() {
     return Response(404,

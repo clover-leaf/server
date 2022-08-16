@@ -53,7 +53,8 @@ class Api {
     return jwt.payload;
   }
 
-  bool isUserJwt(Map<String, dynamic> payload) => payload.containsKey('username');
+  bool isUserJwt(Map<String, dynamic> payload) =>
+      payload.containsKey('username');
 
   /// extract jwt from header
   /// ex: 'Bearer abc.def.ghi' => abc.def.ghi
@@ -533,9 +534,10 @@ class Api {
           .execute();
       if (resUser.hasError) return UserNotExistError.message();
       final passwordDB = resUser.data['password'];
+      final id = resUser.data['id'];
       if (password == passwordDB) {
         // jwt contain username
-        final jwt = JWT({'username': username, 'domain': domain});
+        final jwt = JWT({'id': id, 'username': username, 'domain': domain});
         final token = jwt.sign(
           SecretKey(verifyDomainSecret),
           expiresIn: verifyDomainDuration,
@@ -553,7 +555,19 @@ class Api {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
-        if (jwtPayload.containsKey('email')) {
+        if (isUserJwt(jwtPayload)) {
+          final username = jwtPayload['username'];
+          final id = jwtPayload['id'];
+          final res = await domainClient
+              .from('user')
+              .select()
+              .match({'id': id})
+              .single()
+              .execute();
+          if (res.hasError) return UnauthorizedError.message();
+          return Response.ok(
+              jsonEncode({'username': username, 'isAdmin': false}));
+        } else {
           final email = jwtPayload['email'];
           final res = await domainClient
               .from('admin')
@@ -563,18 +577,6 @@ class Api {
               .execute();
           if (res.hasError) return UnauthorizedError.message();
           return Response.ok(jsonEncode({'username': email, 'isAdmin': true}));
-        }
-        if (jwtPayload.containsKey('username')) {
-          final username = jwtPayload['username'];
-          final res = await domainClient
-              .from('user')
-              .select()
-              .match({'username': username})
-              .single()
-              .execute();
-          if (res.hasError) return UnauthorizedError.message();
-          return Response.ok(
-              jsonEncode({'username': username, 'isAdmin': false}));
         }
       } catch (e) {
         return UnknownError.message();
@@ -610,6 +612,7 @@ class Api {
           'password': password,
         }));
       } catch (e) {
+        print(e);
         return UnknownError.message();
       }
     });
@@ -712,7 +715,6 @@ class Api {
     // ================== USER REST API ========================
 
     // ================== USER-PROJECT REST API ========================
-
     /// POST: cho phép một người dùng truy cập 1 dự án
     /// admin: ok
     /// user: cấm
@@ -731,14 +733,14 @@ class Api {
         final projectID = payload['project_id'];
         final res = await domainClient.from('user_project').insert({
           'id': id,
-          'userID': userID,
-          'projectID': projectID,
+          'user_id': userID,
+          'project_id': projectID,
         }).execute();
         if (res.hasError) return DatabaseError.message();
         return Response.ok(jsonEncode({
           'id': id,
-          'userID': userID,
-          'projectID': projectID,
+          'user_id': userID,
+          'project_id': projectID,
         }));
       } catch (e) {
         return UnknownError.message();
@@ -760,8 +762,7 @@ class Api {
         final res = await domainClient
             .from('user_project')
             .select()
-            .match({'project_id': projectID})
-            .execute();
+            .match({'project_id': projectID}).execute();
         if (res.hasError) return DatabaseError.message();
         return Response.ok(jsonEncode({'users': res.data}));
       } catch (e) {
@@ -883,21 +884,36 @@ class Api {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
-        // get name of project
-        final res = await domainClient.from('project').select().execute();
-        if (res.hasError) return DatabaseError.message();
-        return Response.ok(jsonEncode({'projects': res.data}));
+        if (isUserJwt(jwtPayload)) {
+          // is user
+          final resJoin = await domainClient
+              .rpc('join_user_project', params: {'s_name': domain}).execute();
+          if (resJoin.hasError) return DatabaseError.message();
+          final joinTable = resJoin.data as List<dynamic>;
+          final userID = jwtPayload['id'];
+          final showProject =
+              joinTable.where((row) => row['user_id'] == userID).toList();
+          return Response.ok(jsonEncode({'projects': showProject}));
+        } else {
+          // is admin
+          final res = await domainClient.from('project').select().execute();
+          if (res.hasError) return DatabaseError.message();
+          return Response.ok(jsonEncode({'projects': res.data}));
+        }
       } catch (e) {
         return UnknownError.message();
       }
     });
 
     // GET: lấy chi tiết dự án với id cụ thể
+    /// admin: ok
+    /// user: cấm
     router.get('/v1/domain/projects/<project_id>',
         (Request request, String projectID) async {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        if (isUserJwt(jwtPayload)) return ForbiddenError();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
         // get name of project
@@ -916,11 +932,14 @@ class Api {
     });
 
     // PUT: cập nhật dự án với id cụ thể
+    /// admin: ok
+    /// user: cấm
     router.put('/v1/domain/projects/<project_id>',
         (Request request, String projectID) async {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        if (isUserJwt(jwtPayload)) return ForbiddenError();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
         // decode request payload
@@ -938,11 +957,14 @@ class Api {
     });
 
     // DELETE: xóa dự án với id cụ thể
+    /// admin: ok
+    /// user: cấm
     router.delete('/v1/domain/projects/<project_id>',
         (Request request, String projectID) async {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        if (isUserJwt(jwtPayload)) return ForbiddenError();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
         final res = await domainClient
@@ -959,10 +981,13 @@ class Api {
 
     // ================== GROUP REST API ========================
     // POST: tạo mới một nhóm
+    // admin: ok
+    // user: cấm
     router.post('/v1/domain/groups', (Request request) async {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        if (isUserJwt(jwtPayload)) return ForbiddenError();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
         // decode request payload
@@ -991,26 +1016,51 @@ class Api {
     });
 
     // GET: lấy danh sách nhóm
+    // admin: ok
+    // user: chỉ trả về group người dùng đc phép truy cập
     router.get('/v1/domain/groups', (Request request) async {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
-        final res = await domainClient.from('group').select().execute();
-        if (res.hasError) return DatabaseError.message();
-        return Response.ok(jsonEncode({'groups': res.data}));
+        if (isUserJwt(jwtPayload)) {
+          // is user
+          final resJoin = await domainClient
+              .rpc('join_user_project', params: {'s_name': domain}).execute();
+          if (resJoin.hasError) return DatabaseError.message();
+          final joinTable = resJoin.data as List<dynamic>;
+          final userID = jwtPayload['id'];
+          final resGroup = await domainClient.from('group').select().execute();
+          if (resGroup.hasError) return DatabaseError.message();
+          final showProjectID = joinTable
+              .where((row) => row['user_id'] == userID)
+              .map((row) => row['project_id']);
+          final allGroup = resGroup.data as List<dynamic>;
+          final showGroup = allGroup
+              .where((row) => showProjectID.contains(row['project_id']))
+              .toList();
+          return Response.ok(jsonEncode({'groups': showGroup}));
+        } else {
+          // is admin
+          final res = await domainClient.from('group').select().execute();
+          if (res.hasError) return DatabaseError.message();
+          return Response.ok(jsonEncode({'groups': res.data}));
+        }
       } catch (e) {
         return UnknownError.message();
       }
     });
 
     // GET: lấy chi tiết nhóm với id cụ thể
+    // admin: ok
+    // user: cấm
     router.get('/v1/domain/groups/<group_id>',
         (Request request, String groupID) async {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        if (isUserJwt(jwtPayload)) return ForbiddenError();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
         final res = await domainClient
@@ -1028,11 +1078,14 @@ class Api {
     });
 
     // PUT: cập nhật nhóm với id cụ thể
+    // admin: ok
+    // user: cấm
     router.put('/v1/domain/groups/<group_id>',
         (Request request, String id) async {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        if (isUserJwt(jwtPayload)) return ForbiddenError();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
         // decode request payload
@@ -1059,11 +1112,14 @@ class Api {
     });
 
     // DELETE: xóa nhóm với id cụ thể
+    // admin: ok
+    // user: cấm
     router.delete('/v1/domain/groups/<group_id>',
         (Request request, String groupID) async {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        if (isUserJwt(jwtPayload)) return ForbiddenError();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
         final res = await domainClient
@@ -1340,7 +1396,7 @@ class Api {
             .from('broker')
             .delete()
             .match({'id': brokerID}).execute();
-        if (res.hasError) return DeviceNotExistError.message();
+        if (res.hasError) return BrokerNotExistError.message();
         return Response.ok(null);
       } catch (e) {
         return UnknownError.message();
@@ -1465,13 +1521,13 @@ class Api {
             .from('attribute')
             .delete()
             .match({'id': attributeID}).execute();
-        if (res.hasError) return DeviceNotExistError.message();
+        if (res.hasError) return AttributeNotExistError.message();
         return Response.ok(null);
       } catch (e) {
         return UnknownError.message();
       }
     });
-    // ================== DEVICE REST API ========================
+    // ================== ATTRIBUTE REST API ========================
 
     // /// Get all project
     // router.get('/api/projects', (Request request) async {
