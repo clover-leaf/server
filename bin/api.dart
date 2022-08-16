@@ -596,17 +596,17 @@ class Api {
         final payload =
             jsonDecode(await request.readAsString()) as Map<String, dynamic>;
         final id = payload['id'];
-        final email = payload['email'];
+        final username = payload['username'];
         final password = payload['password'];
         final res = await domainClient.from('user').insert({
           'id': id,
-          'email': email,
+          'username': username,
           'password': password,
         }).execute();
         if (res.hasError) return DatabaseError.message();
         return Response.ok(jsonEncode({
           'id': id,
-          'email': email,
+          'username': username,
           'password': password,
         }));
       } catch (e) {
