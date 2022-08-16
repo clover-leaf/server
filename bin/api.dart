@@ -53,7 +53,7 @@ class Api {
     return jwt.payload;
   }
 
-  bool isAdminJwt(Map<String, dynamic> payload) => payload.containsKey('email');
+  bool isUserJwt(Map<String, dynamic> payload) => payload.containsKey('username');
 
   /// extract jwt from header
   /// ex: 'Bearer abc.def.ghi' => abc.def.ghi
@@ -589,7 +589,7 @@ class Api {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
-        if (isAdminJwt(jwtPayload)) return ForbiddenError.message();
+        if (isUserJwt(jwtPayload)) return ForbiddenError.message();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
         // decode request payload
@@ -621,7 +621,7 @@ class Api {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
-        if (isAdminJwt(jwtPayload)) return ForbiddenError.message();
+        if (isUserJwt(jwtPayload)) return ForbiddenError.message();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
         final res = await domainClient.from('user').select().execute();
@@ -640,7 +640,7 @@ class Api {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
-        if (isAdminJwt(jwtPayload)) return ForbiddenError.message();
+        if (isUserJwt(jwtPayload)) return ForbiddenError.message();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
         final res = await domainClient
@@ -665,7 +665,7 @@ class Api {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
-        if (isAdminJwt(jwtPayload)) return ForbiddenError.message();
+        if (isUserJwt(jwtPayload)) return ForbiddenError.message();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
         // decode request payload
@@ -696,7 +696,7 @@ class Api {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
-        if (isAdminJwt(jwtPayload)) return ForbiddenError.message();
+        if (isUserJwt(jwtPayload)) return ForbiddenError.message();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
         final res = await domainClient
@@ -720,7 +720,7 @@ class Api {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
-        if (isAdminJwt(jwtPayload)) return ForbiddenError.message();
+        if (isUserJwt(jwtPayload)) return ForbiddenError.message();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
         // decode request payload
@@ -754,7 +754,7 @@ class Api {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
-        if (isAdminJwt(jwtPayload)) return ForbiddenError.message();
+        if (isUserJwt(jwtPayload)) return ForbiddenError.message();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
         final res = await domainClient
@@ -777,7 +777,7 @@ class Api {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
-        if (isAdminJwt(jwtPayload)) return ForbiddenError.message();
+        if (isUserJwt(jwtPayload)) return ForbiddenError.message();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
         final res = await domainClient
@@ -802,7 +802,7 @@ class Api {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
-        if (isAdminJwt(jwtPayload)) return ForbiddenError.message();
+        if (isUserJwt(jwtPayload)) return ForbiddenError.message();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
         // decode request payload
@@ -833,7 +833,7 @@ class Api {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
-        if (isAdminJwt(jwtPayload)) return ForbiddenError.message();
+        if (isUserJwt(jwtPayload)) return ForbiddenError.message();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
         final res = await domainClient
@@ -856,7 +856,7 @@ class Api {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
-        if (isAdminJwt(jwtPayload)) return ForbiddenError.message();
+        if (isUserJwt(jwtPayload)) return ForbiddenError.message();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
         // decode request payload
