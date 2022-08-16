@@ -1136,14 +1136,12 @@ class Api {
         final brokerID = payload['broker_id'];
         final name = payload['name'];
         final topic = payload['topic'];
-        final jsonEnable = payload['json_enable'];
         final res = await domainClient.from('device').insert({
           'id': id,
           'group_id': groupID,
           'broker_id': brokerID,
           'name': name,
-          'topic': topic,
-          'json_enable': jsonEnable,
+          'topic': topic
         }).execute();
         if (res.hasError) return DatabaseError.message();
         return Response.ok(jsonEncode({
@@ -1152,7 +1150,6 @@ class Api {
           'broker_id': brokerID,
           'name': name,
           'topic': topic,
-          'json_enable': jsonEnable,
         }));
       } catch (e) {
         return UnknownError.message();
@@ -1213,13 +1210,11 @@ class Api {
         final brokerID = payload['broker_id'];
         final name = payload['name'];
         final topic = payload['topic'];
-        final jsonEnable = payload['json_enable'];
         final res = await domainClient.from('device').update({
           'group_id': groupID,
           'broker_id': brokerID,
           'name': name,
           'topic': topic,
-          'json_enable': jsonEnable,
         }).match({'id': deviceID}).execute();
         if (res.hasError) return DeviceNotExistError.message();
         return Response.ok(jsonEncode({
@@ -1228,7 +1223,6 @@ class Api {
           'broker_id': brokerID,
           'name': name,
           'topic': topic,
-          'json_enable': jsonEnable,
         }));
       } catch (e) {
         return UnknownError.message();
