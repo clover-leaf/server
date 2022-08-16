@@ -124,6 +124,14 @@ class DatabaseError {
   }
 }
 
+class ForbiddenError {
+  static Response message() {
+    return Response(403,
+        body: jsonEncode(
+            {'message': 'Request is forbidden'}));
+  }
+}
+
 class UnknownError {
   static Response message() {
     return Response(404,

@@ -53,6 +53,8 @@ class Api {
     return jwt.payload;
   }
 
+  bool isAdminJwt(Map<String, dynamic> payload) => payload.containsKey('email');
+
   /// extract jwt from header
   /// ex: 'Bearer abc.def.ghi' => abc.def.ghi
   String getJwt(String? header) {
@@ -390,6 +392,10 @@ class Api {
           params: {'schemas': '$dbSchemas, $domain'}).execute();
       if (resExpose.hasError) return DatabaseError.message();
       // CREATE TABLE
+      // ADMIN
+      final resAdmin = await supabaseClient
+          .rpc('create_admin', params: {'s_name': domain}).execute();
+      if (resAdmin.hasError) return DatabaseError.message();
       // USER
       final resUser = await supabaseClient
           .rpc('create_user', params: {'s_name': domain}).execute();
@@ -398,6 +404,10 @@ class Api {
       final resProject = await supabaseClient
           .rpc('create_project', params: {'s_name': domain}).execute();
       if (resProject.hasError) return DatabaseError.message();
+      // USER-PROJECT
+      final resUserProject = await supabaseClient
+          .rpc('create_user_project', params: {'s_name': domain}).execute();
+      if (resUserProject.hasError) return DatabaseError.message();
       // GROUP
       final resGroup = await supabaseClient
           .rpc('create_group', params: {'s_name': domain}).execute();
@@ -417,12 +427,9 @@ class Api {
       // create SupabaseClient for new schema
       final domainClient = createSupabaseClient(domain);
       // add customer info to user table
-      final resAddUser = await domainClient.from('user').insert({
-        'email': email,
-        'salt': salt,
-        'hash': hash,
-        'is_admin': true
-      }).execute();
+      final resAddUser = await domainClient
+          .from('admin')
+          .insert({'email': email, 'salt': salt, 'hash': hash}).execute();
       if (resAddUser.hasError) {
         print(resAddUser.error);
         return DatabaseError.message();
@@ -477,12 +484,12 @@ class Api {
     /// ====================== MOBILE ==============================
 
     /// POST: đăng nhập vào domain
-    /// trả về jwt 
+    /// trả về jwt
     router.post('/v1/domain/login', (Request request) async {
       final payload =
           jsonDecode(await request.readAsString()) as Map<String, dynamic>;
       final domain = payload['domain'];
-      final email = payload['email'];
+      final username = payload['username'];
       final password = payload['password'];
       // create supabase_client for sys schema
       final supabaseClient = createSupabaseClient('sys');
@@ -493,28 +500,47 @@ class Api {
       if (!dbSchemas.contains(domain)) return DomainNotExistError.message();
       // create SupabaseClient for new schema
       final domainClient = createSupabaseClient(domain);
-      // hash password with salt
-      final res = await domainClient
-          .from('user')
+      final resAdmin = await domainClient
+          .from('admin')
           .select()
-          .match({'email': email})
+          .match({'email': username})
           .single()
           .execute();
-      if (res.hasError) return UserNotExistError.message();
-
-      final salt = res.data['salt'];
-      final hashDB = res.data['hash'];
-
-      final bytes = utf8.encode(password + salt);
-      final hash = sha256.convert(bytes).toString();
-      if (hash == hashDB) {
-        // create jwt token to confirm
-        final jwt = JWT({'email': email, 'domain': domain});
+      // account is admin
+      if (!resAdmin.hasError) {
+        // hash password with salt
+        final salt = resAdmin.data['salt'];
+        final bytes = utf8.encode(password + salt);
+        final hash = sha256.convert(bytes).toString();
+        final hashDB = resAdmin.data['hash'];
+        // check password is matched
+        if (hash == hashDB) {
+          // jwt contain email
+          final jwt = JWT({'email': username, 'domain': domain});
+          final token = jwt.sign(
+            SecretKey(verifyDomainSecret),
+            expiresIn: verifyDomainDuration,
+          );
+          return Response.ok(jsonEncode({'token': token, 'isAdmin': true}));
+        }
+      }
+      // account is user
+      final resUser = await domainClient
+          .from('user')
+          .select()
+          .match({'username': username})
+          .single()
+          .execute();
+      if (resUser.hasError) return UserNotExistError.message();
+      final passwordDB = resUser.data['password'];
+      if (password == passwordDB) {
+        // jwt contain username
+        final jwt = JWT({'username': username, 'domain': domain});
         final token = jwt.sign(
           SecretKey(verifyDomainSecret),
           expiresIn: verifyDomainDuration,
         );
-        return Response.ok(jsonEncode({'token': token}));
+        return Response.ok(jsonEncode({'token': token, 'isAdmin': false}));
       } else {
         return EmailOrPasswordNotMatchedError.message();
       }
@@ -526,88 +552,101 @@ class Api {
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
         final domain = jwtPayload['domain'];
-        final email = jwtPayload['email'];
         final domainClient = await getDomainClient(domain);
-        final res = await domainClient
-            .from('user')
-            .select()
-            .match({'email': email})
-            .single()
-            .execute();
-        if (res.hasError) {
-          return UnauthorizedError.message();
+        if (jwtPayload.containsKey('email')) {
+          final email = jwtPayload['email'];
+          final res = await domainClient
+              .from('admin')
+              .select()
+              .match({'email': email})
+              .single()
+              .execute();
+          if (res.hasError) return UnauthorizedError.message();
+          return Response.ok(jsonEncode({'username': email, 'isAdmin': true}));
         }
-        final isAdmin = res.data['is_admin'];
-        return Response.ok(jsonEncode({'email': email, 'isAdmin': isAdmin}));
+        if (jwtPayload.containsKey('username')) {
+          final username = jwtPayload['username'];
+          final res = await domainClient
+              .from('user')
+              .select()
+              .match({'username': username})
+              .single()
+              .execute();
+          if (res.hasError) return UnauthorizedError.message();
+          return Response.ok(
+              jsonEncode({'username': username, 'isAdmin': false}));
+        }
       } catch (e) {
         return UnknownError.message();
       }
     });
 
     // ================== USER REST API ========================
-    // POST: tạo mới một tài khoản người dùng
+    /// POST: tạo mới một tài khoản người dùng
+    /// admin: ok
+    /// user: cấm
     router.post('/v1/domain/users', (Request request) async {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        if (isAdminJwt(jwtPayload)) return ForbiddenError.message();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
         // decode request payload
         final payload =
             jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final id = payload['id'];
         final email = payload['email'];
         final password = payload['password'];
-        // hash password with salt
-        final salt = generateRandomString(6);
-        final bytes = utf8.encode(password + salt);
-        final hash = sha256.convert(bytes).toString();
         final res = await domainClient.from('user').insert({
+          'id': id,
           'email': email,
-          'salt': salt,
-          'hash': hash,
-          'is_admin': false,
+          'password': password,
         }).execute();
         if (res.hasError) return DatabaseError.message();
         return Response.ok(jsonEncode({
+          'id': id,
           'email': email,
-          'salt': salt,
-          'hash': hash,
-          'is_admin': false,
+          'password': password,
         }));
       } catch (e) {
         return UnknownError.message();
       }
     });
 
-    // GET: lấy danh sách tài khoản người dùng
+    /// GET: lấy danh sách tài khoản người dùng
+    /// admin: ok
+    /// user: cấm
     router.get('/v1/domain/users', (Request request) async {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        if (isAdminJwt(jwtPayload)) return ForbiddenError.message();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
-        // get name of project
-        final res = await domainClient.from('project').select().execute();
+        final res = await domainClient.from('user').select().execute();
         if (res.hasError) return DatabaseError.message();
-        return Response.ok(jsonEncode({'projects': res.data}));
+        return Response.ok(jsonEncode({'users': res.data}));
       } catch (e) {
         return UnknownError.message();
       }
     });
 
-    // GET: lấy chi tiết tài khoản người dùng với email cụ thể
-    router.get('/v1/domain/users/<email>',
-        (Request request, String email) async {
+    /// GET: lấy chi tiết tài khoản người dùng với id cụ thể
+    /// admin: ok
+    /// user: cấm
+    router.get('/v1/domain/users/<user_id>',
+        (Request request, String userID) async {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        if (isAdminJwt(jwtPayload)) return ForbiddenError.message();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
-        // get name of user
         final res = await domainClient
             .from('user')
             .select()
-            .match({'email': email})
+            .match({'id': userID})
             .single()
             .execute();
         if (res.hasError) return ProjectNotExistError.message();
@@ -618,53 +657,52 @@ class Api {
       }
     });
 
-    // PUT: cập nhật tài khoản người dùng với email cụ thể
-    router.put('/v1/domain/users/<email>',
-        (Request request, String email) async {
+    /// PUT: cập nhật tài khoản người dùng với id cụ thể
+    /// admin: ok
+    /// user: cấm
+    router.put('/v1/domain/users/<user_id>',
+        (Request request, String userID) async {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        if (isAdminJwt(jwtPayload)) return ForbiddenError.message();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
         // decode request payload
         final payload =
             jsonDecode(await request.readAsString()) as Map<String, dynamic>;
-        final email = payload['email'];
+        final username = payload['username'];
         final password = payload['password'];
-        // hash password with salt
-        final salt = generateRandomString(6);
-        final bytes = utf8.encode(password + salt);
-        final hash = sha256.convert(bytes).toString();
         final res = await domainClient.from('user').update({
-          'email': email,
-          'salt': salt,
-          'hash': hash,
-          'is_admin': false,
-        }).match({'email': email}).execute();
+          'username': username,
+          'password': password,
+        }).match({'id': userID}).execute();
         if (res.hasError) return ProjectNotExistError.message();
         return Response.ok(jsonEncode({
-          'email': email,
-          'salt': salt,
-          'hash': hash,
-          'is_admin': false,
+          'id': userID,
+          'username': username,
+          'password': password,
         }));
       } catch (e) {
         return UnknownError.message();
       }
     });
 
-    // DELETE: xóa tài khoản người dùng với email cụ thể
-    router.delete('/v1/domain/users/<email>',
-        (Request request, String email) async {
+    /// DELETE: xóa tài khoản người dùng với id cụ thể
+    /// admin: ok
+    /// user: cấm
+    router.delete('/v1/domain/users/<user_id>',
+        (Request request, String userID) async {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        if (isAdminJwt(jwtPayload)) return ForbiddenError.message();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
         final res = await domainClient
             .from('user')
             .delete()
-            .match({'email': email}).execute();
+            .match({'id': userID}).execute();
         if (res.hasError) return ProjectNotExistError.message();
         return Response.ok(null);
       } catch (e) {
@@ -673,12 +711,152 @@ class Api {
     });
     // ================== USER REST API ========================
 
+    // ================== USER-PROJECT REST API ========================
+
+    /// POST: cho phép một người dùng truy cập 1 dự án
+    /// admin: ok
+    /// user: cấm
+    router.post('/v1/domain/users-projects', (Request request) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        if (isAdminJwt(jwtPayload)) return ForbiddenError.message();
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        // decode request payload
+        final payload =
+            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final id = Uuid().v4();
+        final userID = payload['user_id'];
+        final projectID = payload['project_id'];
+        final res = await domainClient.from('user_project').insert({
+          'id': id,
+          'userID': userID,
+          'projectID': projectID,
+        }).execute();
+        if (res.hasError) return DatabaseError.message();
+        return Response.ok(jsonEncode({
+          'id': id,
+          'userID': userID,
+          'projectID': projectID,
+        }));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+
+    /// GET: lấy danh sách người dùng được truy cập vào
+    /// dự án với id cụ thể
+    /// admin: ok
+    /// user: cấm
+    router.get('/v1/domain/users-projects/project/<project_id>',
+        (Request request, String projectID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        if (isAdminJwt(jwtPayload)) return ForbiddenError.message();
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient
+            .from('user_project')
+            .select()
+            .match({'project_id': projectID})
+            .execute();
+        if (res.hasError) return DatabaseError.message();
+        return Response.ok(jsonEncode({'users': res.data}));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+
+    /// GET: lấy chi tiết tài khoản người dùng với id cụ thể
+    /// admin: ok
+    /// user: cấm
+    router.get('/v1/domain/users/<user_id>',
+        (Request request, String userID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        if (isAdminJwt(jwtPayload)) return ForbiddenError.message();
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient
+            .from('user')
+            .select()
+            .match({'id': userID})
+            .single()
+            .execute();
+        if (res.hasError) return ProjectNotExistError.message();
+        return Response.ok(jsonEncode(res.data));
+      } catch (e) {
+        print(e);
+        return UnknownError.message();
+      }
+    });
+
+    /// PUT: cập nhật tài khoản người dùng với id cụ thể
+    /// admin: ok
+    /// user: cấm
+    router.put('/v1/domain/users/<user_id>',
+        (Request request, String userID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        if (isAdminJwt(jwtPayload)) return ForbiddenError.message();
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        // decode request payload
+        final payload =
+            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final username = payload['username'];
+        final password = payload['password'];
+        final res = await domainClient.from('user').update({
+          'username': username,
+          'password': password,
+        }).match({'id': userID}).execute();
+        if (res.hasError) return ProjectNotExistError.message();
+        return Response.ok(jsonEncode({
+          'id': userID,
+          'username': username,
+          'password': password,
+        }));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+
+    /// DELETE: xóa tài khoản người dùng với id cụ thể
+    /// admin: ok
+    /// user: cấm
+    router.delete('/v1/domain/users/<user_id>',
+        (Request request, String userID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        if (isAdminJwt(jwtPayload)) return ForbiddenError.message();
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient
+            .from('user')
+            .delete()
+            .match({'id': userID}).execute();
+        if (res.hasError) return ProjectNotExistError.message();
+        return Response.ok(null);
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+    // ================== USER-PROJECT REST API ========================
+
     // ================== PROJECT REST API ========================
-    // POST: tạo mới một dự án
+    /// POST: tạo mới một dự án
+    /// admin: ok
+    /// user: cấm
     router.post('/v1/domain/projects', (Request request) async {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        if (isAdminJwt(jwtPayload)) return ForbiddenError.message();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
         // decode request payload
@@ -696,7 +874,9 @@ class Api {
       }
     });
 
-    // GET: lấy danh sách dự án
+    /// GET: lấy danh sách dự án
+    /// admin: ok
+    /// user: chỉ trả về các project mà user được cho phép truy cập
     router.get('/v1/domain/projects', (Request request) async {
       final header = request.headers['Authorization'];
       try {
