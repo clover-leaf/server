@@ -1646,7 +1646,130 @@ class Api {
         return UnknownError.message();
       }
     });
-    // ================== ATTRIBUTE REST API ========================
+    // ================== DASHBOARD REST API ========================
+
+    // ================== TILE REST API ========================
+    // POST: tạo mới một ô theo dõi
+    router.post('/v1/domain/tiles ', (Request request) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        // decode request payload
+        final payload =
+            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final id = payload['id'];
+        final dashboardID = payload['dashboard_id'];
+        final deviceID = payload['device_id'];
+        final name = payload['name'];
+        final res = await domainClient.from('tile').insert({
+          'id': id,
+          'dashboard_id': dashboardID,
+          'device_id': deviceID,
+          'name': name,
+        }).execute();
+        if (res.hasError) return DatabaseError.message();
+        return Response.ok(jsonEncode({
+          'id': id,
+          'dashboard_id': dashboardID,
+          'device_id': deviceID,
+          'name': name,
+        }));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+
+    // GET: lấy danh sách ô theo dõi
+    router.get('/v1/domain/tiles', (Request request) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient.from('tile').select().execute();
+        if (res.hasError) {
+          return DatabaseError.message();
+        }
+        return Response.ok(jsonEncode({'tiles': res.data}));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+
+    // GET: lấy chi tiết ô theo dõi với id cụ thể
+    router.get('/v1/domain/tiles/<tile_id>',
+        (Request request, String tileID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient
+            .from('tile')
+            .select()
+            .match({'id': tileID})
+            .single()
+            .execute();
+        if (res.hasError) return DeviceNotExistError.message();
+        return Response.ok(jsonEncode(res.data));
+      } catch (e) {
+        print(e);
+        return UnknownError.message();
+      }
+    });
+
+    // PUT: cập nhật ô theo dõi với id cụ thể
+    router.put('/v1/domain/tiles/<tile_id>',
+        (Request request, String tileID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        // decode request payload
+        final payload =
+            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final dashboardID = payload['dashboard_id'];
+        final deviceID = payload['device_id'];
+        final name = payload['name'];
+        final res = await domainClient.from('tile').update({
+          'dashboard_id': dashboardID,
+          'device_id': deviceID,
+          'name': name,
+        }).match({'id': tileID}).execute();
+        if (res.hasError) return DeviceNotExistError.message();
+        return Response.ok(jsonEncode({
+          'id': tileID,
+          'dashboard_id': dashboardID,
+          'device_id': deviceID,
+          'name': name,
+        }));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+
+    // DELETE: xóa ô theo dõi với id cụ thể
+    router.delete('/v1/domain/tiles/<tile_id>',
+        (Request request, String tileID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient
+            .from('tile')
+            .delete()
+            .match({'id': tileID}).execute();
+        if (res.hasError) return AttributeNotExistError.message();
+        return Response.ok(null);
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+    // ================== TILE REST API ========================
 
     // /// Get all project
     // router.get('/api/projects', (Request request) async {
