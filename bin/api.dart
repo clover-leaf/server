@@ -1279,6 +1279,7 @@ class Api {
         final projectID = payload['project_id'];
         final name = payload['name'];
         final url = payload['url'];
+        final port = payload['port'];
         final account = payload['account'];
         final password = payload['password'];
         final res = await domainClient.from('broker').insert({
@@ -1286,6 +1287,7 @@ class Api {
           'project_id': projectID,
           'name': name,
           'url': url,
+          'port': port,
           'account': account,
           'password': password,
         }).execute();
@@ -1298,6 +1300,7 @@ class Api {
           'project_id': projectID,
           'name': name,
           'url': url,
+          'port': port,
           'account': account,
           'password': password,
         }));
@@ -1359,12 +1362,14 @@ class Api {
         final groupID = payload['group_id'];
         final name = payload['name'];
         final url = payload['url'];
+        final port = payload['port'];
         final account = payload['account'];
         final password = payload['password'];
         final res = await domainClient.from('broker').update({
           'group_id': groupID,
           'name': name,
           'url': url,
+          'port': port,
           'account': account,
           'password': password,
         }).match({'id': brokerID}).execute();
@@ -1374,6 +1379,7 @@ class Api {
           'group_id': groupID,
           'name': name,
           'url': url,
+          'port': port,
           'account': account,
           'password': password,
         }));
@@ -2015,7 +2021,7 @@ class Api {
         return UnknownError.message();
       }
     });
-    // ================== TILE REST API ========================
+    // ================== TOGGLE TILE REST API ========================
     // /// Get all project
     // router.get('/api/projects', (Request request) async {
     //   final response = await client.from('project').select().execute();
