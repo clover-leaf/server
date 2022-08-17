@@ -425,6 +425,22 @@ class Api {
       final resAttribute = await supabaseClient
           .rpc('create_attribute', params: {'s_name': domain}).execute();
       if (resAttribute.hasError) return DatabaseError.message();
+      // DASHBOARD
+      final resDashboard = await supabaseClient
+          .rpc('create_dashboard', params: {'s_name': domain}).execute();
+      if (resDashboard.hasError) return DatabaseError.message();
+      // TILE
+      final resTile = await supabaseClient
+          .rpc('create_tile', params: {'s_name': domain}).execute();
+      if (resTile.hasError) return DatabaseError.message();
+      // TEXT TILE
+      final resTextTile = await supabaseClient
+          .rpc('create_text_tile', params: {'s_name': domain}).execute();
+      if (resTextTile.hasError) return DatabaseError.message();
+      // TOGGLE TILE
+      final resToggleTile = await supabaseClient
+          .rpc('create_toggle_tile', params: {'s_name': domain}).execute();
+      if (resToggleTile.hasError) return DatabaseError.message();
       // create SupabaseClient for new schema
       final domainClient = createSupabaseClient(domain);
       // add customer info to user table
@@ -1017,20 +1033,19 @@ class Api {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
+        final res = await domainClient.from('group').select().execute();
+        if (res.hasError) return DatabaseError.message();
         if (isUserJwt(jwtPayload)) {
           // is user
-          final resJoin = await domainClient
-              .rpc('join_user_group', params: {'s_name': domain}).execute();
-          if (resJoin.hasError) return DatabaseError.message();
-          final joinTable = resJoin.data as List<dynamic>;
-          final userID = jwtPayload['id'];
-          final showGroup =
-              joinTable.where((row) => row['user_id'] == userID).toList();
-          return Response.ok(jsonEncode({'groups': showGroup}));
+          // final userID = jwtPayload['id'];
+          // final resUsPr = await domainClient
+          //     .from('user_project')
+          //     .select('project_id')
+          //     .match({'user_id': userID}).execute();
+          // if (resUsPr.hasError) return DatabaseError.message();
+          return Response.ok(jsonEncode({'groups': res.data}));
         } else {
           // is admin
-          final res = await domainClient.from('group').select().execute();
-          if (res.hasError) return DatabaseError.message();
           return Response.ok(jsonEncode({'groups': res.data}));
         }
       } catch (e) {
@@ -1402,11 +1417,13 @@ class Api {
         final deviceID = payload['device_id'];
         final name = payload['name'];
         final jsonPath = payload['json_path'];
+        final unit = payload['unit'];
         final res = await domainClient.from('attribute').insert({
           'id': id,
           'device_id': deviceID,
           'name': name,
           'json_path': jsonPath,
+          'unit': unit,
         }).execute();
         if (res.hasError) return DatabaseError.message();
         return Response.ok(jsonEncode({
@@ -1414,6 +1431,7 @@ class Api {
           'device_id': deviceID,
           'name': name,
           'json_path': jsonPath,
+          'unit': unit,
         }));
       } catch (e) {
         return UnknownError.message();
@@ -1470,22 +1488,23 @@ class Api {
         // decode request payload
         final payload =
             jsonDecode(await request.readAsString()) as Map<String, dynamic>;
-        final id = payload['id'];
         final deviceID = payload['device_id'];
         final name = payload['name'];
         final jsonPath = payload['json_path'];
+        final unit = payload['unit'];
         final res = await domainClient.from('attribute').update({
-          'id': id,
           'device_id': deviceID,
           'name': name,
           'json_path': jsonPath,
+          'unit': unit,
         }).match({'id': attributeID}).execute();
         if (res.hasError) return DeviceNotExistError.message();
         return Response.ok(jsonEncode({
-          'id': id,
+          'id': attributeID,
           'device_id': deviceID,
           'name': name,
           'json_path': jsonPath,
+          'unit': unit,
         }));
       } catch (e) {
         return UnknownError.message();
@@ -1504,6 +1523,123 @@ class Api {
             .from('attribute')
             .delete()
             .match({'id': attributeID}).execute();
+        if (res.hasError) return AttributeNotExistError.message();
+        return Response.ok(null);
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+    // ================== ATTRIBUTE REST API ========================
+
+    // ================== DASHBOARD REST API ========================
+    // POST: tạo mới một bảng theo dõi
+    router.post('/v1/domain/dashboards', (Request request) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        // decode request payload
+        final payload =
+            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final id = payload['id'];
+        final projectID = payload['project_id'];
+        final name = payload['name'];
+        final res = await domainClient.from('dashboard').insert({
+          'id': id,
+          'project_id': projectID,
+          'name': name,
+        }).execute();
+        if (res.hasError) return DatabaseError.message();
+        return Response.ok(jsonEncode({
+          'id': id,
+          'project_id': projectID,
+          'name': name,
+        }));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+
+    // GET: lấy danh sách bảng theo dõi
+    router.get('/v1/domain/dashboards', (Request request) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient.from('dashboard').select().execute();
+        if (res.hasError) {
+          return DatabaseError.message();
+        }
+        return Response.ok(jsonEncode({'dashboards': res.data}));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+
+    // GET: lấy chi tiết bảng theo dõi với id cụ thể
+    router.get('/v1/domain/dashboards/<dashboard_id>',
+        (Request request, String dashboardID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient
+            .from('dashboard')
+            .select()
+            .match({'id': dashboardID})
+            .single()
+            .execute();
+        if (res.hasError) return DeviceNotExistError.message();
+        return Response.ok(jsonEncode(res.data));
+      } catch (e) {
+        print(e);
+        return UnknownError.message();
+      }
+    });
+
+    // PUT: cập nhật bảng theo dõi với id cụ thể
+    router.put('/v1/domain/dashboards/<dashboard_id>',
+        (Request request, String dashboardID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        // decode request payload
+        final payload =
+            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final projectID = payload['project_id'];
+        final name = payload['name'];
+        final res = await domainClient.from('dashboard').update({
+          'project_id': projectID,
+          'name': name,
+        }).match({'id': dashboardID}).execute();
+        if (res.hasError) return DeviceNotExistError.message();
+        return Response.ok(jsonEncode({
+          'id': dashboardID,
+          'project_id': projectID,
+          'name': name,
+        }));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+
+    // DELETE: xóa bảng theo dõi với id cụ thể
+    router.delete('/v1/domain/dashboards/<dashboard_id>',
+        (Request request, String dashboardID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient
+            .from('dashboard')
+            .delete()
+            .match({'id': dashboardID}).execute();
         if (res.hasError) return AttributeNotExistError.message();
         return Response.ok(null);
       } catch (e) {
