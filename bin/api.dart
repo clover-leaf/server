@@ -1771,6 +1771,116 @@ class Api {
     });
     // ================== TILE REST API ========================
 
+    // ================== TEXT TILE REST API ========================
+    // POST: tạo mới một ô theo dõi dạng text
+    router.post('/v1/domain/text-tiles ', (Request request) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        // decode request payload
+        final payload =
+            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final id = payload['id'];
+        final attributeID = payload['attribute_id'];
+        final res = await domainClient.from('text_tile').insert({
+          'id': id,
+          'attribute_id': attributeID,
+        }).execute();
+        if (res.hasError) return DatabaseError.message();
+        return Response.ok(jsonEncode({
+          'id': id,
+          'attribute_id': attributeID,
+        }));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+
+    // GET: lấy danh sách ô theo dõi dạng text
+    router.get('/v1/domain/text-tiles', (Request request) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient.from('text_tile').select().execute();
+        if (res.hasError) {
+          return DatabaseError.message();
+        }
+        return Response.ok(jsonEncode({'text-tiles': res.data}));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+
+    // GET: lấy chi tiết ô theo dõi dạng text với id cụ thể
+    router.get('/v1/domain/text-tiles/<text_tile_id>',
+        (Request request, String textTileID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient
+            .from('text_tile')
+            .select()
+            .match({'id': textTileID})
+            .single()
+            .execute();
+        if (res.hasError) return DeviceNotExistError.message();
+        return Response.ok(jsonEncode(res.data));
+      } catch (e) {
+        print(e);
+        return UnknownError.message();
+      }
+    });
+
+    // PUT: cập nhật ô theo dõi dạng text với id cụ thể
+    router.put('/v1/domain/text-tiles/<text_tile_id>',
+        (Request request, String textTileID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        // decode request payload
+        final payload =
+            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final attributeID = payload['attribute_id'];
+        final res = await domainClient.from('text_tile').update({
+          'attribute_id': attributeID,
+        }).match({'id': textTileID}).execute();
+        if (res.hasError) return DeviceNotExistError.message();
+        return Response.ok(jsonEncode({
+          'id': textTileID,
+          'attribute_id': attributeID,
+        }));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+
+    // DELETE: xóa ô theo dõi dạng text với id cụ thể
+    router.delete('/v1/domain/text-tiles/<text_tile_id>',
+        (Request request, String textTileID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient
+            .from('text_tile')
+            .delete()
+            .match({'id': textTileID}).execute();
+        if (res.hasError) return AttributeNotExistError.message();
+        return Response.ok(null);
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+    // ================== TILE REST API ========================
     // /// Get all project
     // router.get('/api/projects', (Request request) async {
     //   final response = await client.from('project').select().execute();
