@@ -1363,24 +1363,24 @@ class Api {
         // decode request payload
         final payload =
             jsonDecode(await request.readAsString()) as Map<String, dynamic>;
-        final groupID = payload['group_id'];
+        final projectID = payload['project_id'];
         final name = payload['name'];
         final url = payload['url'];
         final port = payload['port'];
         final account = payload['account'];
         final password = payload['password'];
         final res = await domainClient.from('broker').update({
-          'group_id': groupID,
+          'project_id': projectID,
           'name': name,
           'url': url,
           'port': port,
           'account': account,
           'password': password,
         }).match({'id': brokerID}).execute();
-        if (res.hasError) return DeviceNotExistError.message();
+        if (res.hasError) return BrokerNotExistError.message();
         return Response.ok(jsonEncode({
           'id': brokerID,
-          'group_id': groupID,
+          'project_id': projectID,
           'name': name,
           'url': url,
           'port': port,
