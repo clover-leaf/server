@@ -420,27 +420,31 @@ class Api {
       // DEVICE
       final resDevice = await supabaseClient
           .rpc('create_device', params: {'s_name': domain}).execute();
-      if (resDevice.hasError) return DatabaseError.message();
+      if (resDevice.hasError) {
+        print(resDevice.error);
+        return DatabaseError.message();
+      }
       // ATTRIBUTE
       final resAttribute = await supabaseClient
           .rpc('create_attribute', params: {'s_name': domain}).execute();
-      if (resAttribute.hasError) return DatabaseError.message();
+      if (resAttribute.hasError)  {
+        print(resAttribute.error);
+        return DatabaseError.message();
+      }
       // DASHBOARD
       final resDashboard = await supabaseClient
           .rpc('create_dashboard', params: {'s_name': domain}).execute();
-      if (resDashboard.hasError) return DatabaseError.message();
+      if (resDashboard.hasError) {
+        print(resDashboard.error);
+        return DatabaseError.message();
+      }
       // TILE
       final resTile = await supabaseClient
           .rpc('create_tile', params: {'s_name': domain}).execute();
-      if (resTile.hasError) return DatabaseError.message();
-      // TEXT TILE
-      final resTextTile = await supabaseClient
-          .rpc('create_text_tile', params: {'s_name': domain}).execute();
-      if (resTextTile.hasError) return DatabaseError.message();
-      // TOGGLE TILE
-      final resToggleTile = await supabaseClient
-          .rpc('create_toggle_tile', params: {'s_name': domain}).execute();
-      if (resToggleTile.hasError) return DatabaseError.message();
+      if (resTile.hasError) {
+        print(resTile.error);
+        return DatabaseError.message();
+      }
       // create SupabaseClient for new schema
       final domainClient = createSupabaseClient(domain);
       // add customer info to user table
