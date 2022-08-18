@@ -1668,19 +1668,28 @@ class Api {
         final id = payload['id'];
         final dashboardID = payload['dashboard_id'];
         final deviceID = payload['device_id'];
+        final attributeID = payload['attribute_id'];
         final name = payload['name'];
+        final type = payload['type'];
+        final lob = payload['lob'];
         final res = await domainClient.from('tile').insert({
           'id': id,
           'dashboard_id': dashboardID,
           'device_id': deviceID,
+          'attribute_id': attributeID,
           'name': name,
+          'type': type,
+          'lob': lob,
         }).execute();
         if (res.hasError) return DatabaseError.message();
         return Response.ok(jsonEncode({
           'id': id,
           'dashboard_id': dashboardID,
           'device_id': deviceID,
+          'attribute_id': attributeID,
           'name': name,
+          'type': type,
+          'lob': lob,
         }));
       } catch (e) {
         return UnknownError.message();
@@ -1739,18 +1748,27 @@ class Api {
             jsonDecode(await request.readAsString()) as Map<String, dynamic>;
         final dashboardID = payload['dashboard_id'];
         final deviceID = payload['device_id'];
+        final attributeID = payload['attribute_id'];
         final name = payload['name'];
+        final type = payload['type'];
+        final lob = payload['lob'];
         final res = await domainClient.from('tile').update({
           'dashboard_id': dashboardID,
           'device_id': deviceID,
+          'attribute_id': attributeID,
           'name': name,
+          'type': type,
+          'lob': lob,
         }).match({'id': tileID}).execute();
         if (res.hasError) return DeviceNotExistError.message();
         return Response.ok(jsonEncode({
           'id': tileID,
           'dashboard_id': dashboardID,
           'device_id': deviceID,
+          'attribute_id': attributeID,
           'name': name,
+          'type': type,
+          'lob': lob,
         }));
       } catch (e) {
         return UnknownError.message();
@@ -1777,251 +1795,6 @@ class Api {
     });
     // ================== TILE REST API ========================
 
-    // ================== TEXT TILE REST API ========================
-    // POST: tạo mới một ô theo dõi dạng text
-    router.post('/v1/domain/text-tiles ', (Request request) async {
-      final header = request.headers['Authorization'];
-      try {
-        final jwtPayload = verifyJwt(header, verifyDomainSecret);
-        final domain = jwtPayload['domain'];
-        final domainClient = await getDomainClient(domain);
-        // decode request payload
-        final payload =
-            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
-        final id = payload['id'];
-        final attributeID = payload['attribute_id'];
-        final res = await domainClient.from('text_tile').insert({
-          'id': id,
-          'attribute_id': attributeID,
-        }).execute();
-        if (res.hasError) return DatabaseError.message();
-        return Response.ok(jsonEncode({
-          'id': id,
-          'attribute_id': attributeID,
-        }));
-      } catch (e) {
-        return UnknownError.message();
-      }
-    });
-
-    // GET: lấy danh sách ô theo dõi dạng text
-    router.get('/v1/domain/text-tiles', (Request request) async {
-      final header = request.headers['Authorization'];
-      try {
-        final jwtPayload = verifyJwt(header, verifyDomainSecret);
-        final domain = jwtPayload['domain'];
-        final domainClient = await getDomainClient(domain);
-        final res = await domainClient.from('text_tile').select().execute();
-        if (res.hasError) {
-          return DatabaseError.message();
-        }
-        return Response.ok(jsonEncode({'text-tiles': res.data}));
-      } catch (e) {
-        return UnknownError.message();
-      }
-    });
-
-    // GET: lấy chi tiết ô theo dõi dạng text với id cụ thể
-    router.get('/v1/domain/text-tiles/<text_tile_id>',
-        (Request request, String textTileID) async {
-      final header = request.headers['Authorization'];
-      try {
-        final jwtPayload = verifyJwt(header, verifyDomainSecret);
-        final domain = jwtPayload['domain'];
-        final domainClient = await getDomainClient(domain);
-        final res = await domainClient
-            .from('text_tile')
-            .select()
-            .match({'id': textTileID})
-            .single()
-            .execute();
-        if (res.hasError) return DeviceNotExistError.message();
-        return Response.ok(jsonEncode(res.data));
-      } catch (e) {
-        print(e);
-        return UnknownError.message();
-      }
-    });
-
-    // PUT: cập nhật ô theo dõi dạng text với id cụ thể
-    router.put('/v1/domain/text-tiles/<text_tile_id>',
-        (Request request, String textTileID) async {
-      final header = request.headers['Authorization'];
-      try {
-        final jwtPayload = verifyJwt(header, verifyDomainSecret);
-        final domain = jwtPayload['domain'];
-        final domainClient = await getDomainClient(domain);
-        // decode request payload
-        final payload =
-            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
-        final attributeID = payload['attribute_id'];
-        final res = await domainClient.from('text_tile').update({
-          'attribute_id': attributeID,
-        }).match({'id': textTileID}).execute();
-        if (res.hasError) return DeviceNotExistError.message();
-        return Response.ok(jsonEncode({
-          'id': textTileID,
-          'attribute_id': attributeID,
-        }));
-      } catch (e) {
-        return UnknownError.message();
-      }
-    });
-
-    // DELETE: xóa ô theo dõi dạng text với id cụ thể
-    router.delete('/v1/domain/text-tiles/<text_tile_id>',
-        (Request request, String textTileID) async {
-      final header = request.headers['Authorization'];
-      try {
-        final jwtPayload = verifyJwt(header, verifyDomainSecret);
-        final domain = jwtPayload['domain'];
-        final domainClient = await getDomainClient(domain);
-        final res = await domainClient
-            .from('text_tile')
-            .delete()
-            .match({'id': textTileID}).execute();
-        if (res.hasError) return AttributeNotExistError.message();
-        return Response.ok(null);
-      } catch (e) {
-        return UnknownError.message();
-      }
-    });
-    // ================== TEXT TILE REST API ========================
-
-    // ================== TOGGLE TILE REST API ========================
-    // POST: tạo mới một ô theo dõi dạng toggle
-    router.post('/v1/domain/toggle-tiles ', (Request request) async {
-      final header = request.headers['Authorization'];
-      try {
-        final jwtPayload = verifyJwt(header, verifyDomainSecret);
-        final domain = jwtPayload['domain'];
-        final domainClient = await getDomainClient(domain);
-        // decode request payload
-        final payload =
-            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
-        final id = payload['id'];
-        final attributeID = payload['attribute_id'];
-        final onValue = payload['on_value'];
-        final offValue = payload['off_value'];
-        final onLabel = payload['on_label'];
-        final offLabel = payload['off_label'];
-        final res = await domainClient.from('toggle_tile').insert({
-          'id': id,
-          'attribute_id': attributeID,
-          'on_value': onValue,
-          'off_value': offValue,
-          'on_label': onLabel,
-          'off_label': offLabel,
-        }).execute();
-        if (res.hasError) return DatabaseError.message();
-        return Response.ok(jsonEncode({
-          'id': id,
-          'attribute_id': attributeID,
-          'on_value': onValue,
-          'off_value': offValue,
-          'on_label': onLabel,
-          'off_label': offLabel,
-        }));
-      } catch (e) {
-        return UnknownError.message();
-      }
-    });
-
-    // GET: lấy danh sách ô theo dõi dạng toggle
-    router.get('/v1/domain/toggle-tiles', (Request request) async {
-      final header = request.headers['Authorization'];
-      try {
-        final jwtPayload = verifyJwt(header, verifyDomainSecret);
-        final domain = jwtPayload['domain'];
-        final domainClient = await getDomainClient(domain);
-        final res = await domainClient.from('toggle_tile').select().execute();
-        if (res.hasError) {
-          return DatabaseError.message();
-        }
-        return Response.ok(jsonEncode({'toggle-tiles': res.data}));
-      } catch (e) {
-        return UnknownError.message();
-      }
-    });
-
-    // GET: lấy chi tiết ô theo dõi dạng toggle với id cụ thể
-    router.get('/v1/domain/toggle-tiles/<toggle_tile_id>',
-        (Request request, String toggleTileID) async {
-      final header = request.headers['Authorization'];
-      try {
-        final jwtPayload = verifyJwt(header, verifyDomainSecret);
-        final domain = jwtPayload['domain'];
-        final domainClient = await getDomainClient(domain);
-        final res = await domainClient
-            .from('toggle_tile')
-            .select()
-            .match({'id': toggleTileID})
-            .single()
-            .execute();
-        if (res.hasError) return DeviceNotExistError.message();
-        return Response.ok(jsonEncode(res.data));
-      } catch (e) {
-        print(e);
-        return UnknownError.message();
-      }
-    });
-
-    // PUT: cập nhật ô theo dõi dạng toggle với id cụ thể
-    router.put('/v1/domain/toggle-tiles/<toggle_tile_id>',
-        (Request request, String toggleTileID) async {
-      final header = request.headers['Authorization'];
-      try {
-        final jwtPayload = verifyJwt(header, verifyDomainSecret);
-        final domain = jwtPayload['domain'];
-        final domainClient = await getDomainClient(domain);
-        // decode request payload
-        final payload =
-            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
-        final attributeID = payload['attribute_id'];
-        final onValue = payload['on_value'];
-        final offValue = payload['off_value'];
-        final onLabel = payload['on_label'];
-        final offLabel = payload['off_label'];
-        final res = await domainClient.from('toggle_tile').update({
-          'attribute_id': attributeID,
-          'on_value': onValue,
-          'off_value': offValue,
-          'on_label': onLabel,
-          'off_label': offLabel,
-        }).match({'id': toggleTileID}).execute();
-        if (res.hasError) return DeviceNotExistError.message();
-        return Response.ok(jsonEncode({
-          'id': toggleTileID,
-          'attribute_id': attributeID,
-          'on_value': onValue,
-          'off_value': offValue,
-          'on_label': onLabel,
-          'off_label': offLabel,
-        }));
-      } catch (e) {
-        return UnknownError.message();
-      }
-    });
-
-    // DELETE: xóa ô theo dõi dạng toggle với id cụ thể
-    router.delete('/v1/domain/toggle-tiles/<toggle_tile_id>',
-        (Request request, String toggleTileID) async {
-      final header = request.headers['Authorization'];
-      try {
-        final jwtPayload = verifyJwt(header, verifyDomainSecret);
-        final domain = jwtPayload['domain'];
-        final domainClient = await getDomainClient(domain);
-        final res = await domainClient
-            .from('toggle_tile')
-            .delete()
-            .match({'id': toggleTileID}).execute();
-        if (res.hasError) return AttributeNotExistError.message();
-        return Response.ok(null);
-      } catch (e) {
-        return UnknownError.message();
-      }
-    });
-    // ================== TOGGLE TILE REST API ========================
     // /// Get all project
     // router.get('/api/projects', (Request request) async {
     //   final response = await client.from('project').select().execute();
