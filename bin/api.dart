@@ -427,7 +427,7 @@ class Api {
       // ATTRIBUTE
       final resAttribute = await supabaseClient
           .rpc('create_attribute', params: {'s_name': domain}).execute();
-      if (resAttribute.hasError)  {
+      if (resAttribute.hasError) {
         print(resAttribute.error);
         return DatabaseError.message();
       }
@@ -824,7 +824,7 @@ class Api {
             jsonDecode(await request.readAsString()) as Map<String, dynamic>;
         final userID = payload['user_id'];
         final projectID = payload['project_id'];
-        final res = await domainClient.from('user-project').update({
+        final res = await domainClient.from('user_project').update({
           'user_id': userID,
           'project_id': projectID,
         }).match({'id': id}).execute();
@@ -851,10 +851,13 @@ class Api {
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
         final res = await domainClient
-            .from('user-project')
+            .from('user_project')
             .delete()
             .match({'id': id}).execute();
-        if (res.hasError) return ProjectNotExistError.message();
+        if (res.hasError) {
+          print(res.error);
+          return UserProjectNotExistError.message();
+        }
         return Response.ok(null);
       } catch (e) {
         return UnknownError.message();

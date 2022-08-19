@@ -102,6 +102,13 @@ class ProjectNotExistError {
   }
 }
 
+class UserProjectNotExistError {
+  static Response message() {
+    return Response(404,
+        body: jsonEncode({'message': 'This user-project not exist'}));
+  }
+}
+
 class GroupNotExistError {
   static Response message() {
     return Response(404,
