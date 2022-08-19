@@ -603,6 +603,72 @@ class Api {
       }
     });
 
+    /// Lấy toàn bộ dữ liệu của schema
+    router.get('/v1/domain/initial', (Request request) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        if (isUserJwt(jwtPayload)) return ForbiddenError.message();
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        if (isUserJwt(jwtPayload)) {
+          // is user
+          return Response.ok(jsonEncode({'data': ''}));
+        } else {
+          // is admin
+          final res = await domainClient.from('project').select().execute();
+          if (res.hasError) return DatabaseError.message();
+          // get project rows
+          final resProject =
+              await domainClient.from('project').select().execute();
+          if (resProject.hasError) return DatabaseError.message();
+          // get user rows
+          final resUser = await domainClient.from('user').select().execute();
+          if (resUser.hasError) return DatabaseError.message();
+          // get user_project rows
+          final resUserProject =
+              await domainClient.from('user_project').select().execute();
+          if (resUserProject.hasError) return DatabaseError.message();
+          // get group rows
+          final resGroup = await domainClient.from('group').select().execute();
+          if (resGroup.hasError) return DatabaseError.message();
+          // get broker rows
+          final resBroker =
+              await domainClient.from('broker').select().execute();
+          if (resBroker.hasError) return DatabaseError.message();
+          // get device rows
+          final resDevice =
+              await domainClient.from('device').select().execute();
+          if (resDevice.hasError) return DatabaseError.message();
+          // get attribute rows
+          final resAttribute =
+              await domainClient.from('attribute').select().execute();
+          if (resAttribute.hasError) return DatabaseError.message();
+          // get dashboard rows
+          final resDashboard =
+              await domainClient.from('dashboard').select().execute();
+          if (resDashboard.hasError) return DatabaseError.message();
+          // get tile rows
+          final resTile = await domainClient.from('tile').select().execute();
+          if (resTile.hasError) return DatabaseError.message();
+          return Response.ok(jsonEncode({
+            'projects': resProject.data,
+            'users': resUser.data,
+            'user-projects': resUserProject.data,
+            'groups': resGroup.data,
+            'brokers': resBroker.data,
+            'devices': resDevice.data,
+            'attributes': resAttribute.data,
+            'dashboards': resDashboard.data,
+            'tiles': resTile.data,
+          }));
+        }
+      } catch (e) {
+        print(e.toString());
+        return UnknownError.message();
+      }
+    });
+
     // ================== USER REST API ========================
     /// POST: tạo mới một tài khoản người dùng
     /// admin: ok
