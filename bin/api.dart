@@ -1663,7 +1663,7 @@ class Api {
 
     // ================== TILE REST API ========================
     // POST: tạo mới một ô theo dõi
-    router.post('/v1/domain/tiles ', (Request request) async {
+    router.post('/v1/domain/tiles', (Request request) async {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
