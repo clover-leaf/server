@@ -1745,6 +1745,8 @@ class Api {
         final name = payload['name'];
         final type = payload['type'];
         final lob = payload['lob'];
+        final color = payload['color'];
+        final icon = payload['icon'];
         final res = await domainClient.from('tile').insert({
           'id': id,
           'dashboard_id': dashboardID,
@@ -1753,6 +1755,8 @@ class Api {
           'name': name,
           'type': type,
           'lob': lob,
+          'color': color,
+          'icon': icon,
         }).execute();
         if (res.hasError) return DatabaseError.message();
         return Response.ok(jsonEncode({
@@ -1763,6 +1767,8 @@ class Api {
           'name': name,
           'type': type,
           'lob': lob,
+          'color': color,
+          'icon': icon,
         }));
       } catch (e) {
         return UnknownError.message();
@@ -1825,6 +1831,8 @@ class Api {
         final name = payload['name'];
         final type = payload['type'];
         final lob = payload['lob'];
+        final color = payload['color'];
+        final icon = payload['icon'];
         final res = await domainClient.from('tile').update({
           'dashboard_id': dashboardID,
           'device_id': deviceID,
@@ -1832,6 +1840,8 @@ class Api {
           'name': name,
           'type': type,
           'lob': lob,
+          'color': color,
+          'icon': icon,
         }).match({'id': tileID}).execute();
         if (res.hasError) return DeviceNotExistError.message();
         return Response.ok(jsonEncode({
@@ -1842,6 +1852,8 @@ class Api {
           'name': name,
           'type': type,
           'lob': lob,
+          'color': color,
+          'icon': icon,
         }));
       } catch (e) {
         return UnknownError.message();
