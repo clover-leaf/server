@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:dotenv/dotenv.dart';
 import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
+import 'package:dotenv/dotenv.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
 import 'package:supabase/supabase.dart';
@@ -445,6 +445,13 @@ class Api {
         print(resTile.error);
         return DatabaseError.message();
       }
+      // STORAGE
+      final resStorage = await supabaseClient
+          .rpc('create_storage', params: {'s_name': domain}).execute();
+      if (resStorage.hasError) {
+        print(resStorage.error);
+        return DatabaseError.message();
+      }
       // create SupabaseClient for new schema
       final domainClient = createSupabaseClient(domain);
       // add customer info to user table
@@ -608,20 +615,112 @@ class Api {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
-        if (isUserJwt(jwtPayload)) return ForbiddenError.message();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
+        final res = await domainClient.from('project').select().execute();
+        if (res.hasError) return DatabaseError.message();
+        // get project rows
+        final resProject =
+            await domainClient.from('project').select().execute();
+        if (resProject.hasError) return DatabaseError.message();
+        // get group rows
+        final resGroup = await domainClient.from('group').select().execute();
+        if (resGroup.hasError) return DatabaseError.message();
+        // get broker rows
+        final resBroker = await domainClient.from('broker').select().execute();
+        if (resBroker.hasError) return DatabaseError.message();
+        // get device rows
+        final resDevice = await domainClient.from('device').select().execute();
+        if (resDevice.hasError) return DatabaseError.message();
+        // get attribute rows
+        final resAttribute =
+            await domainClient.from('attribute').select().execute();
+        if (resAttribute.hasError) return DatabaseError.message();
+        // get dashboard rows
+        final resDashboard =
+            await domainClient.from('dashboard').select().execute();
+        if (resDashboard.hasError) return DatabaseError.message();
+        // get tile rows
+        final resTile = await domainClient.from('tile').select().execute();
+        if (resTile.hasError) return DatabaseError.message();
         if (isUserJwt(jwtPayload)) {
+          final sysDomain = createSupabaseClient('sys');
           // is user
-          return Response.ok(jsonEncode({'data': ''}));
+          final resJoin = await sysDomain
+              .rpc('join_user_project', params: {'s_name': domain}).execute();
+          if (resJoin.hasError) {
+            print(resJoin.error);
+            return DatabaseError.message();
+          }
+          final joinTable = resJoin.data as List<dynamic>;
+          final userID = jwtPayload['id'];
+          // filter by projects which user can access
+          final showProjectJoins =
+              joinTable.where((row) => row['user_id'] == userID).toList();
+          final showProjectIDs = showProjectJoins
+              .map((pr) => (pr as Map<String, dynamic>)['project_id'] as String)
+              .toList();
+          final projects = resProject.data as List<dynamic>;
+          final showProject = projects.where((pr) {
+            final prAsMap = pr as Map<String, dynamic>;
+            final prID = prAsMap['id'] as String;
+            return showProjectIDs.contains(prID);
+          }).toList();
+          // Broker
+          final brokers = resBroker.data as List<dynamic>;
+          final showBroker = brokers.where((br) {
+            final brAsMap = br as Map<String, dynamic>;
+            final brPrID = brAsMap['project_id'] as String;
+            return showProjectIDs.contains(brPrID);
+          }).toList();
+          // Device
+          final showBrokerIDs = showBroker
+              .map((br) => (br as Map<String, dynamic>)['id'] as String)
+              .toList();
+          final devices = resDevice.data as List<dynamic>;
+          final showDevice = devices.where((dv) {
+            final dvAsMap = dv as Map<String, dynamic>;
+            final dvBrID = dvAsMap['broker_id'] as String;
+            return showBrokerIDs.contains(dvBrID);
+          }).toList();
+          // Attribute
+          final showDeviceIDs = showDevice
+              .map((dv) => (dv as Map<String, dynamic>)['id'] as String)
+              .toList();
+          final attributes = resAttribute.data as List<dynamic>;
+          final showAttribute = attributes.where((att) {
+            final attAsMap = att as Map<String, dynamic>;
+            final attDvID = attAsMap['device_id'] as String;
+            return showDeviceIDs.contains(attDvID);
+          }).toList();
+          // Dashboard
+          final dashboards = resDashboard.data as List<dynamic>;
+          final showDashboard = dashboards.where((db) {
+            final dbAsMap = db as Map<String, dynamic>;
+            final dbPrID = dbAsMap['project_id'] as String;
+            return showProjectIDs.contains(dbPrID);
+          }).toList();
+          // Tile
+          final showDashboardIDs = showDashboard
+              .map((db) => (db as Map<String, dynamic>)['id'] as String)
+              .toList();
+          final tiles = resTile.data as List<dynamic>;
+          final showTile = tiles.where((tl) {
+            final tlAsMap = tl as Map<String, dynamic>;
+            final tlDbID = tlAsMap['dashboard_id'] as String;
+            return showDashboardIDs.contains(tlDbID);
+          }).toList();
+          return Response.ok(jsonEncode({
+            'projects': showProject,
+            'brokers': showBroker,
+            'groups': resGroup.data,
+            'devices': showDevice,
+            'attributes': showAttribute,
+            'dashboards': showDashboard,
+            'tiles': showTile,
+          }));
         } else {
-          // is admin
-          final res = await domainClient.from('project').select().execute();
-          if (res.hasError) return DatabaseError.message();
-          // get project rows
-          final resProject =
-              await domainClient.from('project').select().execute();
-          if (resProject.hasError) return DatabaseError.message();
+          // is admin then we query data from table user and user_project
           // get user rows
           final resUser = await domainClient.from('user').select().execute();
           if (resUser.hasError) return DatabaseError.message();
@@ -629,34 +728,12 @@ class Api {
           final resUserProject =
               await domainClient.from('user_project').select().execute();
           if (resUserProject.hasError) return DatabaseError.message();
-          // get group rows
-          final resGroup = await domainClient.from('group').select().execute();
-          if (resGroup.hasError) return DatabaseError.message();
-          // get broker rows
-          final resBroker =
-              await domainClient.from('broker').select().execute();
-          if (resBroker.hasError) return DatabaseError.message();
-          // get device rows
-          final resDevice =
-              await domainClient.from('device').select().execute();
-          if (resDevice.hasError) return DatabaseError.message();
-          // get attribute rows
-          final resAttribute =
-              await domainClient.from('attribute').select().execute();
-          if (resAttribute.hasError) return DatabaseError.message();
-          // get dashboard rows
-          final resDashboard =
-              await domainClient.from('dashboard').select().execute();
-          if (resDashboard.hasError) return DatabaseError.message();
-          // get tile rows
-          final resTile = await domainClient.from('tile').select().execute();
-          if (resTile.hasError) return DatabaseError.message();
           return Response.ok(jsonEncode({
             'projects': resProject.data,
             'users': resUser.data,
             'user-projects': resUserProject.data,
-            'groups': resGroup.data,
             'brokers': resBroker.data,
+            'groups': resGroup.data,
             'devices': resDevice.data,
             'attributes': resAttribute.data,
             'dashboards': resDashboard.data,
