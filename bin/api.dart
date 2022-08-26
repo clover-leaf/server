@@ -2135,13 +2135,13 @@ class Api {
         final id = payload['id'];
         final alertID = payload['alert_id'];
         final attributeID = payload['attribute_id'];
-        final comparation = payload['comparation'];
+        final comparison = payload['comparison'];
         final value = payload['value'];
         final res = await domainClient.from('condition').insert({
           'id': id,
           'alert_id': alertID,
           'attribute_id': attributeID,
-          'comparation': comparation,
+          'comparison': comparison,
           'value': value,
         }).execute();
         if (res.hasError) return DatabaseError.message();
@@ -2149,7 +2149,7 @@ class Api {
           'id': id,
           'alert_id': alertID,
           'attribute_id': attributeID,
-          'comparation': comparation,
+          'comparison': comparison,
           'value': value,
         }));
       } catch (e) {
@@ -2209,12 +2209,12 @@ class Api {
             jsonDecode(await request.readAsString()) as Map<String, dynamic>;
         final alertID = payload['alert_id'];
         final attributeID = payload['attribute_id'];
-        final comparation = payload['comparation'];
+        final comparison = payload['comparison'];
         final value = payload['value'];
         final res = await domainClient.from('condition').update({
           'alert_id': alertID,
           'attribute_id': attributeID,
-          'comparation': comparation,
+          'comparison': comparison,
           'value': value,
         }).match({'id': conditionID}).execute();
         if (res.hasError) return DeviceNotExistError.message();
@@ -2222,7 +2222,7 @@ class Api {
           'id': conditionID,
           'alert_id': alertID,
           'attribute_id': attributeID,
-          'comparation': comparation,
+          'comparison': comparison,
           'value': value,
         }));
       } catch (e) {
