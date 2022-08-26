@@ -1291,6 +1291,7 @@ class Api {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        if (isUserJwt(jwtPayload)) return ForbiddenError.message();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
         // decode request payload
@@ -1420,6 +1421,7 @@ class Api {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        if (isUserJwt(jwtPayload)) return ForbiddenError.message();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
         // decode request payload
@@ -1564,6 +1566,7 @@ class Api {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        if (isUserJwt(jwtPayload)) return ForbiddenError.message();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
         // decode request payload
@@ -1693,6 +1696,7 @@ class Api {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        if (isUserJwt(jwtPayload)) return ForbiddenError.message();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
         // decode request payload
@@ -1810,6 +1814,7 @@ class Api {
       final header = request.headers['Authorization'];
       try {
         final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        if (isUserJwt(jwtPayload)) return ForbiddenError.message();
         final domain = jwtPayload['domain'];
         final domainClient = await getDomainClient(domain);
         // decode request payload
@@ -1957,546 +1962,501 @@ class Api {
     });
     // ================== TILE REST API ========================
 
-    // /// Get all project
-    // router.get('/api/projects', (Request request) async {
-    //   final response = await client.from('project').select().execute();
+    // ================== ALERT REST API ========================
+    // POST: tạo mới một ô theo dõi
+    router.post('/v1/domain/alerts', (Request request) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        if (isUserJwt(jwtPayload)) return ForbiddenError.message();
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        // decode request payload
+        final payload =
+            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final id = payload['id'];
+        final deviceID = payload['device_id'];
+        final name = payload['name'];
+        final res = await domainClient.from('alert').insert({
+          'id': id,
+          'device_id': deviceID,
+          'name': name,
+        }).execute();
+        if (res.hasError) return DatabaseError.message();
+        return Response.ok(jsonEncode({
+          'id': id,
+          'device_id': deviceID,
+          'name': name,
+        }));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
 
-    //   return Response.ok(jsonEncode({'success': true, 'data': response.data}),
-    //       headers: {'Content-type': 'application/json'});
-    // });
+    // GET: lấy danh sách ô theo dõi
+    router.get('/v1/domain/alerts', (Request request) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient.from('alert').select().execute();
+        if (res.hasError) {
+          return DatabaseError.message();
+        }
+        return Response.ok(jsonEncode({'alerts': res.data}));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
 
-    // /// Create project
-    // router.post('/api/projects', (Request request) async {
-    //   try {
-    //     final payload =
-    //         jsonDecode(await request.readAsString()) as Map<String, dynamic>;
-    //     print(payload);
-    //     final id = payload['id'];
-    //     final key = payload['key'];
-    //     final name = payload['name'];
-    //     final description = payload['description'];
-    //     final userId = payload['user_id'];
+    // GET: lấy chi tiết ô theo dõi với id cụ thể
+    router.get('/v1/domain/alerts/<alert_id>',
+        (Request request, String alertID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient
+            .from('alert')
+            .select()
+            .match({'id': alertID})
+            .single()
+            .execute();
+        if (res.hasError) return DeviceNotExistError.message();
+        return Response.ok(jsonEncode(res.data));
+      } catch (e) {
+        print(e);
+        return UnknownError.message();
+      }
+    });
 
-    //     final body = {
-    //       'key': key,
-    //       'name': name,
-    //     };
-    //     if (description != null) {
-    //       body['description'] = description;
-    //     }
-    //     final response = await httpClient.post(
-    //       Uri.http(kBaseURL, '/api/v2/$username/groups'),
-    //       body: body,
-    //       headers: {
-    //         'X-AIO-Key': ioKey,
-    //       },
-    //     );
-    //     if (response.statusCode == 201) {
-    //       try {
-    //         final adafruitBody =
-    //             jsonDecode(response.body) as Map<String, dynamic>;
-    //         final supabaseInstance = {
-    //           'id': id as String,
-    //           'name': name as String,
-    //           'key': key as String,
-    //           'description': description as String?,
-    //           'created_at': adafruitBody['created_at'] as String,
-    //           'updated_at': adafruitBody['updated_at'] as String,
-    //           'created_by': userId as String,
-    //           'updated_by': userId,
-    //         };
-    //         print(supabaseInstance);
-    //         final supaReponse =
-    //             await client.from('project').insert(supabaseInstance).execute();
-    //         final result = supaReponse.data as List;
-    //         return Response.ok(
-    //           jsonEncode({'success': true, 'data': result.first}),
-    //           headers: {'Content-type': 'application/json'},
-    //         );
-    //       } catch (e) {
-    //         print(e);
-    //         return Response.badRequest(body: jsonEncode({'success': false}));
-    //       }
-    //     } else {
-    //       return Response.badRequest(body: jsonEncode({'success': false}));
-    //     }
-    //   } catch (e) {
-    //     print(e);
-    //     return Response.badRequest(body: jsonEncode({'success': false}));
-    //   }
-    // });
+    // PUT: cập nhật ô theo dõi với id cụ thể
+    router.put('/v1/domain/alerts/<alert_id>',
+        (Request request, String alertID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        // decode request payload
+        final payload =
+            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final deviceID = payload['device_id'];
+        final name = payload['name'];
+        final res = await domainClient.from('alert').update({
+          'device_id': deviceID,
+          'name': name,
+        }).match({'id': alertID}).execute();
+        if (res.hasError) return DeviceNotExistError.message();
+        return Response.ok(jsonEncode({
+          'id': alertID,
+          'device_id': deviceID,
+          'name': name,
+        }));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
 
-    // /// Update project
-    // router.put('/api/projects/<old_key>',
-    //     (Request request, String oldKey) async {
-    //   try {
-    //     final payload =
-    //         jsonDecode(await request.readAsString()) as Map<String, dynamic>;
-    //     final id = payload['id'];
-    //     final key = payload['key'];
-    //     final name = payload['name'];
-    //     final description = payload['description'];
-    //     final createBy = payload['create_by'];
-    //     final userId = payload['user_id'];
-    //     final body = {
-    //       'key': key,
-    //       'name': name,
-    //     };
-    //     if (description != null) {
-    //       body['description'] = description;
-    //     }
-    //     final response = await httpClient.put(
-    //       Uri.http(kBaseURL, '/api/v2/$username/groups/$oldKey'),
-    //       body: body,
-    //       headers: {
-    //         'X-AIO-Key': ioKey,
-    //       },
-    //     );
-    //     if (response.statusCode == 200) {
-    //       final adafruitBody =
-    //           jsonDecode(response.body) as Map<String, dynamic>;
-    //       final supabaseInstance = {
-    //         'name': name as String,
-    //         'key': key as String,
-    //         'description': description as String?,
-    //         'created_at': adafruitBody['created_at'] as String,
-    //         'updated_at': adafruitBody['updated_at'] as String,
-    //         'created_by': createBy as String,
-    //         'updated_by': userId as String,
-    //       };
+    // DELETE: xóa ô theo dõi với id cụ thể
+    router.delete('/v1/domain/alerts/<alert_id>',
+        (Request request, String alertID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient
+            .from('alert')
+            .delete()
+            .match({'id': alertID}).execute();
+        if (res.hasError) return AttributeNotExistError.message();
+        return Response.ok(null);
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+    // ================== ALERT REST API ========================
 
-    //       final supaReponse = await client
-    //           .from('project')
-    //           .update(supabaseInstance)
-    //           .match({'id': id}).execute();
-    //       final result = supaReponse.data as List;
-    //       return Response.ok(
-    //         jsonEncode({'success': true, 'data': result.first}),
-    //         headers: {'Content-type': 'application/json'},
-    //       );
-    //     } else {
-    //       return Response.badRequest(body: jsonEncode({'success': false}));
-    //     }
-    //   } catch (e) {
-    //     return Response.badRequest(body: jsonEncode({'success': false}));
-    //   }
-    // });
+    // ================== CONDITION REST API ========================
+    // POST: tạo mới một ô theo dõi
+    router.post('/v1/domain/conditions', (Request request) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        if (isUserJwt(jwtPayload)) return ForbiddenError.message();
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        // decode request payload
+        final payload =
+            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final id = payload['id'];
+        final alertID = payload['alert_id'];
+        final attributeID = payload['attribute_id'];
+        final comparation = payload['comparation'];
+        final value = payload['value'];
+        final res = await domainClient.from('condition').insert({
+          'id': id,
+          'alert_id': alertID,
+          'attribute_id': attributeID,
+          'comparation': comparation,
+          'value': value,
+        }).execute();
+        if (res.hasError) return DatabaseError.message();
+        return Response.ok(jsonEncode({
+          'id': id,
+          'alert_id': alertID,
+          'attribute_id': attributeID,
+          'comparation': comparation,
+          'value': value,
+        }));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
 
-    // /// Get specific project
-    // router.get('/api/projects/<id>', (Request request, String id) async {
-    //   final response =
-    //       await client.from('projects').select().match({'id': id}).execute();
-    //   return Response.ok(jsonEncode({'success': true, 'data': response.data}),
-    //       headers: {'Content-type': 'application/json'});
-    // });
+    // GET: lấy danh sách ô theo dõi
+    router.get('/v1/domain/conditions', (Request request) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient.from('condition').select().execute();
+        if (res.hasError) {
+          return DatabaseError.message();
+        }
+        return Response.ok(jsonEncode({'conditions': res.data}));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
 
-    // router.delete('/api/projects/<id>', (Request request, String id) async {
-    //   final response =
-    //       await client.from('projects').delete().match({'id': id}).execute();
+    // GET: lấy chi tiết ô theo dõi với id cụ thể
+    router.get('/v1/domain/conditions/<condition_id>',
+        (Request request, String conditionID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient
+            .from('condition')
+            .select()
+            .match({'id': conditionID})
+            .single()
+            .execute();
+        if (res.hasError) return DeviceNotExistError.message();
+        return Response.ok(jsonEncode(res.data));
+      } catch (e) {
+        print(e);
+        return UnknownError.message();
+      }
+    });
 
-    //   return Response.ok(
-    //     jsonEncode({'success': true, 'data': response.data}),
-    //     headers: {'Content-type': 'application/json'},
-    //   );
-    // });
+    // PUT: cập nhật ô theo dõi với id cụ thể
+    router.put('/v1/domain/conditions/<condition_id>',
+        (Request request, String conditionID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        // decode request payload
+        final payload =
+            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final alertID = payload['alert_id'];
+        final attributeID = payload['attribute_id'];
+        final comparation = payload['comparation'];
+        final value = payload['value'];
+        final res = await domainClient.from('condition').update({
+          'alert_id': alertID,
+          'attribute_id': attributeID,
+          'comparation': comparation,
+          'value': value,
+        }).match({'id': conditionID}).execute();
+        if (res.hasError) return DeviceNotExistError.message();
+        return Response.ok(jsonEncode({
+          'id': conditionID,
+          'alert_id': alertID,
+          'attribute_id': attributeID,
+          'comparation': comparation,
+          'value': value,
+        }));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
 
-    // router.get('/api/schema', (Request request) async {
-    //   final response = await client.rpc('get_projects').execute();
-    //   return Response.ok(jsonEncode({'success': true, 'data': response.data}),
-    //       headers: {'Content-type': 'application/json'});
-    // });
+    // DELETE: xóa ô theo dõi với id cụ thể
+    router.delete('/v1/domain/conditions/<condition_id>',
+        (Request request, String conditionID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient
+            .from('condition')
+            .delete()
+            .match({'id': conditionID}).execute();
+        if (res.hasError) return AttributeNotExistError.message();
+        return Response.ok(null);
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+    // ================== CONDITION REST API ========================
 
-    // ///
-    // /// ================================================
-    // ///
+    // ================== ACTION REST API ========================
+    // POST: tạo mới một ô theo dõi
+    router.post('/v1/domain/actions', (Request request) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        if (isUserJwt(jwtPayload)) return ForbiddenError.message();
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        // decode request payload
+        final payload =
+            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final id = payload['id'];
+        final alertID = payload['alert_id'];
+        final deviceID = payload['device_id'];
+        final attributeID = payload['attribute_id'];
+        final value = payload['value'];
+        final res = await domainClient.from('action').insert({
+          'id': id,
+          'alert_id': alertID,
+          'device_id': deviceID,
+          'attribute_id': attributeID,
+          'value': value,
+        }).execute();
+        if (res.hasError) return DatabaseError.message();
+        return Response.ok(jsonEncode({
+          'id': id,
+          'alert_id': alertID,
+          'device_id': deviceID,
+          'attribute_id': attributeID,
+          'value': value,
+        }));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
 
-    // /// Get all devices
-    // router.get('/api/devices', (Request request) async {
-    //   final response = await client.from('device').select().execute();
+    // GET: lấy danh sách ô theo dõi
+    router.get('/v1/domain/actions', (Request request) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient.from('action').select().execute();
+        if (res.hasError) {
+          return DatabaseError.message();
+        }
+        return Response.ok(jsonEncode({'actions': res.data}));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
 
-    //   final devicesFull = <dynamic>[];
-    //   for (final device in (response.data as List<dynamic>)) {
-    //     final deviceFull = Map<String, dynamic>.from(device);
-    //     final json = await client
-    //         .from('json_variable')
-    //         .select()
-    //         .match({'device_id': device['id']}).execute();
-    //     deviceFull['json_variables'] = json.data ?? [];
-    //     devicesFull.add(deviceFull);
-    //   }
+    // GET: lấy chi tiết ô theo dõi với id cụ thể
+    router.get('/v1/domain/actions/<action_id>',
+        (Request request, String actionID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient
+            .from('action')
+            .select()
+            .match({'id': actionID})
+            .single()
+            .execute();
+        if (res.hasError) return DeviceNotExistError.message();
+        return Response.ok(jsonEncode(res.data));
+      } catch (e) {
+        print(e);
+        return UnknownError.message();
+      }
+    });
 
-    //   return Response.ok(jsonEncode({'success': true, 'data': devicesFull}),
-    //       headers: {'Content-type': 'application/json'});
-    // });
+    // PUT: cập nhật ô theo dõi với id cụ thể
+    router.put('/v1/domain/actions/<action_id>',
+        (Request request, String actionID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        // decode request payload
+        final payload =
+            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final alertID = payload['alert_id'];
+        final deviceID = payload['device_id'];
+        final attributeID = payload['attribute_id'];
+        final value = payload['value'];
+        final res = await domainClient.from('action').update({
+          'alert_id': alertID,
+          'device_id': deviceID,
+          'attribute_id': attributeID,
+          'value': value,
+        }).match({'id': actionID}).execute();
+        if (res.hasError) return DeviceNotExistError.message();
+        return Response.ok(jsonEncode({
+          'id': actionID,
+          'alert_id': alertID,
+          'device_id': deviceID,
+          'attribute_id': attributeID,
+          'value': value,
+        }));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
 
-    // /// Create device
-    // router.post('/api/devices', (Request request) async {
-    //   try {
-    //     final payload =
-    //         jsonDecode(await request.readAsString()) as Map<String, dynamic>;
-    //     final id = payload['id'];
-    //     final projectId = payload['project_id'];
-    //     final projectKey = payload['project_key'];
-    //     final name = payload['name'];
-    //     final key = payload['key'];
-    //     final description = payload['description'];
-    //     final jsonEnable = payload['json_enable'];
-    //     final jsonVariables = payload['json_variables'] as List<dynamic>;
-    //     final userID = payload['user_id'];
-    //     final body = {
-    //       'feed': {
-    //         'name': name,
-    //         'key': key,
-    //         'description': description,
-    //       }
-    //     };
-    //     final response = await httpClient.post(
-    //       Uri.http(kBaseURL, '/api/v2/$username/groups/$projectKey/feeds'),
-    //       body: jsonEncode(body),
-    //       headers: {
-    //         'Content-Type': 'application/json',
-    //         'X-AIO-Key': ioKey,
-    //       },
-    //     );
-    //     if (response.statusCode == 201) {
-    //       final adafruitBody =
-    //           jsonDecode(response.body) as Map<String, dynamic>;
-    //       // add to device table
-    //       final supabaseInstance = {
-    //         'id': id as String,
-    //         'project_id': projectId as String,
-    //         'name': name as String,
-    //         'key': key as String,
-    //         'description': description as String?,
-    //         'json_enable': jsonEnable as bool,
-    //         'created_at': adafruitBody['created_at'] as String,
-    //         'updated_at': adafruitBody['updated_at'] as String,
-    //         'created_by': userID as String,
-    //         'updated_by': userID,
-    //       };
-    //       final supaReponse =
-    //           await client.from('device').insert(supabaseInstance).execute();
-    //       // add to json_variable table
-    //       final jsonVariablesJson = <dynamic>[];
-    //       for (final jsonVariable in jsonVariables) {
-    //         final json = await client
-    //             .from('json_variable')
-    //             .insert(jsonVariable)
-    //             .execute();
-    //         jsonVariablesJson.add((json.data as List<dynamic>).first);
-    //       }
-    //       final deviceJson =
-    //           Map<String, dynamic>.from((supaReponse.data as List).first);
-    //       deviceJson["json_variables"] = jsonVariablesJson;
-    //       return Response.ok(
-    //         jsonEncode({'success': true, 'data': deviceJson}),
-    //         headers: {'Content-type': 'application/json'},
-    //       );
-    //     } else {
-    //       return Response.badRequest(body: jsonEncode({'success': false}));
-    //     }
-    //   } catch (e) {
-    //     return Response.badRequest(body: jsonEncode({'success': false}));
-    //   }
-    // });
+    // DELETE: xóa ô theo dõi với id cụ thể
+    router.delete('/v1/domain/actions/<action_id>',
+        (Request request, String actionID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient
+            .from('action')
+            .delete()
+            .match({'id': actionID}).execute();
+        if (res.hasError) return AttributeNotExistError.message();
+        return Response.ok(null);
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+    // ================== ACTION REST API ========================
 
-    // /// Update device
-    // router.put('/api/devices/<old_key>',
-    //     (Request request, String oldKey) async {
-    //   try {
-    //     final payload =
-    //         jsonDecode(await request.readAsString()) as Map<String, dynamic>;
-    //     final id = payload['id'];
-    //     final projectId = payload['project_id'];
-    //     final projectKey = payload['project_key'];
-    //     final name = payload['name'];
-    //     final key = payload['key'];
-    //     final description = payload['description'];
-    //     final jsonEnable = payload['json_enable'];
-    //     final jsonVariables = payload['json_variables'] as List<dynamic>;
-    //     final userID = payload['user_id'];
-    //     final body = {
-    //       'feed': {
-    //         'name': name,
-    //         'key': key,
-    //       }
-    //     };
-    //     if (description != null) {
-    //       body['feed']!['description'] = description;
-    //     }
-    //     final response = await httpClient.put(
-    //       Uri.http(kBaseURL, '/api/v2/$username/feeds/$projectKey.$oldKey'),
-    //       body: jsonEncode(body),
-    //       headers: {
-    //         'Content-Type': 'application/json',
-    //         'X-AIO-Key': ioKey,
-    //       },
-    //     );
-    //     if (response.statusCode == 200) {
-    //       final adafruitBody =
-    //           jsonDecode(response.body) as Map<String, dynamic>;
-    //       final supabaseInstance = {
-    //         'id': id as String,
-    //         'project_id': projectId as String,
-    //         'name': name as String,
-    //         'key': key as String,
-    //         'description': description as String?,
-    //         'json_enable': jsonEnable as bool,
-    //         'created_at': adafruitBody['created_at'] as String,
-    //         'updated_at': adafruitBody['updated_at'] as String,
-    //         'created_by': userID as String,
-    //         'updated_by': userID,
-    //       };
-    //       final supaReponse = await client
-    //           .from('device')
-    //           .update(supabaseInstance)
-    //           .match({'id': id}).execute();
+    // ================== LOG REST API ========================
+    // POST: tạo mới một ô theo dõi
+    router.post('/v1/domain/logs', (Request request) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        if (isUserJwt(jwtPayload)) return ForbiddenError.message();
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        // decode request payload
+        final payload =
+            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final id = payload['id'];
+        final alertID = payload['alert_id'];
+        final time = payload['time'];
+        final res = await domainClient.from('log').insert({
+          'id': id,
+          'alert_id': alertID,
+          'time': time,
+        }).execute();
+        if (res.hasError) return DatabaseError.message();
+        return Response.ok(jsonEncode({
+          'id': id,
+          'alert_id': alertID,
+          'time': time,
+        }));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
 
-    //       final jsonVariablesJson = <dynamic>[];
-    //       for (final jsonVariable in jsonVariables) {
-    //         final json = await client
-    //             .from('json_variable')
-    //             .upsert(jsonVariable)
-    //             .execute();
-    //         jsonVariablesJson.add((json.data as List<dynamic>).first);
-    //       }
-    //       final deviceJson =
-    //           Map<String, dynamic>.from((supaReponse.data as List).first);
-    //       deviceJson["json_variables"] = jsonVariablesJson;
-    //       return Response.ok(
-    //         jsonEncode({'success': true, 'data': deviceJson}),
-    //         headers: {'Content-type': 'application/json'},
-    //       );
-    //     } else {
-    //       return Response.badRequest(body: jsonEncode({'success': false}));
-    //     }
-    //   } catch (e) {
-    //     return Response.badRequest(body: jsonEncode({'success': false}));
-    //   }
-    // });
+    // GET: lấy danh sách ô theo dõi
+    router.get('/v1/domain/logs', (Request request) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient.from('log').select().execute();
+        if (res.hasError) {
+          return DatabaseError.message();
+        }
+        return Response.ok(jsonEncode({'logs': res.data}));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
 
-    // ///
-    // /// =============================  Tile Config =================================
-    // /// Get all tile configs
-    // router.get('/api/tile-configs', (Request request) async {
-    //   final response = await client.from('tile_config').select().execute();
+    // GET: lấy chi tiết ô theo dõi với id cụ thể
+    router.get('/v1/domain/logs/<log_id>',
+        (Request request, String logID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient
+            .from('log')
+            .select()
+            .match({'id': logID})
+            .single()
+            .execute();
+        if (res.hasError) return DeviceNotExistError.message();
+        return Response.ok(jsonEncode(res.data));
+      } catch (e) {
+        print(e);
+        return UnknownError.message();
+      }
+    });
 
-    //   final tileConfigs = <dynamic>[];
-    //   for (final tileConfig in response.data) {
-    //     final id = tileConfig['id'];
-    //     final tileType = tileConfig['tile_type'];
-    //     switch (tileType) {
-    //       case 0:
-    //         final tileDataResponse = await client
-    //             .from('toggle_tile_data')
-    //             .select()
-    //             .match({'id': id})
-    //             .single()
-    //             .execute();
-    //         final toggleTileData =
-    //             tileDataResponse.data as Map<String, dynamic>;
-    //         toggleTileData.remove('id');
-    //         toggleTileData['tile_type'] = 0;
-    //         final completeTileData = Map<String, dynamic>.from(tileConfig);
-    //         completeTileData['tile_data'] = toggleTileData;
-    //         tileConfigs.add(completeTileData);
-    //         break;
-    //       case 1:
-    //         final tileDataResponse = await client
-    //             .from('text_tile_data')
-    //             .select()
-    //             .match({'id': id})
-    //             .single()
-    //             .execute();
-    //         final textTileData = tileDataResponse.data as Map<String, dynamic>;
-    //         textTileData.remove('id');
-    //         textTileData['tile_type'] = 1;
-    //         final completeTileData = Map<String, dynamic>.from(tileConfig);
-    //         completeTileData['tile_data'] = textTileData;
-    //         tileConfigs.add(completeTileData);
-    //         break;
-    //       default:
-    //     }
-    //   }
+    // PUT: cập nhật ô theo dõi với id cụ thể
+    router.put('/v1/domain/logs/<log_id>',
+        (Request request, String logID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        // decode request payload
+        final payload =
+            jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+        final alertID = payload['alert_id'];
+        final time = payload['time'];
+        final res = await domainClient.from('log').update({
+          'alert_id': alertID,
+          'time': time,
+        }).match({'id': logID}).execute();
+        if (res.hasError) return DeviceNotExistError.message();
+        return Response.ok(jsonEncode({
+          'id': logID,
+          'alert_id': alertID,
+          'time': time,
+        }));
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
 
-    //   return Response.ok(jsonEncode({'success': true, 'data': tileConfigs}),
-    //       headers: {'Content-type': 'application/json'});
-    // });
-
-    // /// Create tile config
-    // router.post('/api/tile-configs', (Request request) async {
-    //   try {
-    //     final payload =
-    //         jsonDecode(await request.readAsString()) as Map<String, dynamic>;
-    //     final id = payload['id'];
-    //     final name = payload['name'];
-    //     final tileType = payload['tile_type'] as int;
-    //     final deviceId = payload['device_id'];
-    //     final tileData = payload['tile_data'];
-    //     final supabaseInstance = {
-    //       'id': id as String,
-    //       'device_id': deviceId as String,
-    //       'name': name as String,
-    //       'tile_type': tileType,
-    //     };
-    //     final supaReponse =
-    //         await client.from('tile_config').insert(supabaseInstance).execute();
-    //     final tileDataJson =
-    //         Map<String, dynamic>.from((supaReponse.data as List).first);
-    //     switch (tileType) {
-    //       case 0:
-    //         final onLabel = tileData['on_label'] as String?;
-    //         final onValue = tileData['on_value'] as String;
-    //         final offLabel = tileData['off_label'] as String?;
-    //         final offValue = tileData['off_value'] as String;
-    //         final jsonVariableId = tileData['json_variable_id'] as String?;
-    //         final tileDataResponse =
-    //             await client.from('toggle_tile_data').insert({
-    //           'id': id,
-    //           'on_label': onLabel,
-    //           'on_value': onValue,
-    //           'off_label': offLabel,
-    //           'off_value': offValue,
-    //           'json_variable_id': jsonVariableId,
-    //         }).execute();
-    //         final toggleTileData =
-    //             (tileDataResponse.data as List).first as Map<String, dynamic>;
-    //         toggleTileData.remove('id');
-    //         toggleTileData['tile_type'] = 0;
-    //         tileDataJson['tile_data'] = toggleTileData;
-    //         break;
-    //       case 1:
-    //         final prefix = tileData['prefix'] as String?;
-    //         final postfix = tileData['postfix'] as String?;
-    //         final jsonVariableId = tileData['json_variable_id'] as String?;
-    //         final tileDataResponse =
-    //             await client.from('text_tile_data').insert({
-    //           'id': id,
-    //           'prefix': prefix,
-    //           'postfix': postfix,
-    //           'json_variable_id': jsonVariableId,
-    //         }).execute();
-    //         final textTileData =
-    //             (tileDataResponse.data as List).first as Map<String, dynamic>;
-    //         textTileData.remove('id');
-    //         textTileData['tile_type'] = 1;
-    //         tileDataJson['tile_data'] = textTileData;
-    //         break;
-    //     }
-    //     return Response.ok(
-    //       jsonEncode({'success': true, 'data': tileDataJson}),
-    //       headers: {'Content-type': 'application/json'},
-    //     );
-    //   } catch (e) {
-    //     return Response.badRequest(body: jsonEncode({'success': false}));
-    //   }
-    // });
-
-    // /// Update tile config
-    // router.put('/api/tile-configs', (Request request) async {
-    //   try {
-    //     final payload =
-    //         jsonDecode(await request.readAsString()) as Map<String, dynamic>;
-    //     final id = payload['id'];
-    //     final name = payload['name'];
-    //     final tileType = payload['tile_type'] as int;
-    //     final deviceId = payload['device_id'];
-    //     final tileData = payload['tile_data'];
-    //     final supabaseInstance = {
-    //       'id': id as String,
-    //       'device_id': deviceId as String,
-    //       'name': name as String,
-    //       'tile_type': tileType,
-    //     };
-    //     final supaReponse =
-    //         await client.from('tile_config').upsert(supabaseInstance).execute();
-    //     final tileDataJson =
-    //         Map<String, dynamic>.from((supaReponse.data as List).first);
-    //     switch (tileType) {
-    //       case 0:
-    //         final onLabel = tileData['on_label'] as String?;
-    //         final onValue = tileData['on_value'] as String;
-    //         final offLabel = tileData['off_label'] as String?;
-    //         final offValue = tileData['off_value'] as String;
-    //         final jsonVariableId = tileData['json_variable_id'] as String?;
-    //         final inserValue = {
-    //           'id': id,
-    //           'on_label': onLabel,
-    //           'on_value': onValue,
-    //           'off_label': offLabel,
-    //           'off_value': offValue,
-    //           'json_variable_id': jsonVariableId,
-    //         };
-    //         final tileDataResponse = await client
-    //             .from('toggle_tile_data')
-    //             .upsert(inserValue)
-    //             .execute();
-    //         final toggleTileData =
-    //             (tileDataResponse.data as List).first as Map<String, dynamic>;
-    //         toggleTileData.remove('id');
-    //         toggleTileData['tile_type'] = 0;
-    //         tileDataJson['tile_data'] = toggleTileData;
-    //         break;
-    //       case 1:
-    //         final prefix = tileData['prefix'] as String?;
-    //         final postfix = tileData['postfix'] as String?;
-    //         final jsonVariableId = tileData['json_variable_id'] as String?;
-    //         final tileDataResponse =
-    //             await client.from('text_tile_data').upsert({
-    //           'id': id,
-    //           'prefix': prefix,
-    //           'postfix': postfix,
-    //           'json_variable_id': jsonVariableId,
-    //         }).execute();
-    //         final textTileData =
-    //             (tileDataResponse.data as List).first as Map<String, dynamic>;
-    //         textTileData.remove('id');
-    //         textTileData['tile_type'] = 1;
-    //         tileDataJson['tile_data'] = textTileData;
-    //         break;
-    //     }
-    //     return Response.ok(
-    //       jsonEncode({'success': true, 'data': tileDataJson}),
-    //       headers: {'Content-type': 'application/json'},
-    //     );
-    //   } catch (e) {
-    //     return Response.badRequest(body: jsonEncode({'success': false}));
-    //   }
-    // });
-
-    // /// Delete tile config
-    // router.delete('/api/tile-configs', (Request request) async {
-    //   try {
-    //     final payload =
-    //         jsonDecode(await request.readAsString()) as Map<String, dynamic>;
-    //     final id = payload['id'];
-    //     await client
-    //         .from('text_tile_data')
-    //         .delete()
-    //         .match({'id': id}).execute();
-    //     await client
-    //         .from('toggle_tile_data')
-    //         .delete()
-    //         .match({'id': id}).execute();
-    //     final supaReponse = await client
-    //         .from('tile_config')
-    //         .delete()
-    //         .match({'id': id}).execute();
-    //     if (supaReponse.hasError) {
-    //       return Response.ok(
-    //         jsonEncode({'success': false}),
-    //         headers: {'Content-type': 'application/json'},
-    //       );
-    //     } else {
-    //       return Response.ok(
-    //         jsonEncode({'success': true}),
-    //         headers: {'Content-type': 'application/json'},
-    //       );
-    //     }
-    //   } catch (e) {
-    //     return Response.badRequest(body: jsonEncode({'success': false}));
-    //   }
-    // });
+    // DELETE: xóa ô theo dõi với id cụ thể
+    router.delete('/v1/domain/logs/<log_id>',
+        (Request request, String logID) async {
+      final header = request.headers['Authorization'];
+      try {
+        final jwtPayload = verifyJwt(header, verifyDomainSecret);
+        final domain = jwtPayload['domain'];
+        final domainClient = await getDomainClient(domain);
+        final res = await domainClient
+            .from('log')
+            .delete()
+            .match({'id': logID}).execute();
+        if (res.hasError) return AttributeNotExistError.message();
+        return Response.ok(null);
+      } catch (e) {
+        return UnknownError.message();
+      }
+    });
+    // ================== LOG REST API ========================
     return router;
   }
 }
