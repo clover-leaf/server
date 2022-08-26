@@ -643,6 +643,16 @@ class Api {
         // get tile rows
         final resTile = await domainClient.from('tile').select().execute();
         if (resTile.hasError) return DatabaseError.message();
+        // get alert rows
+        final resAlert = await domainClient.from('alert').select().execute();
+        if (resAlert.hasError) return DatabaseError.message();
+        // get condition rows
+        final resCondition =
+            await domainClient.from('condition').select().execute();
+        if (resCondition.hasError) return DatabaseError.message();
+        // get action rows
+        final resAction = await domainClient.from('action').select().execute();
+        if (resAction.hasError) return DatabaseError.message();
         if (isUserJwt(jwtPayload)) {
           final sysDomain = createSupabaseClient('sys');
           // is user
@@ -710,6 +720,30 @@ class Api {
             final tlDbID = tlAsMap['dashboard_id'] as String;
             return showDashboardIDs.contains(tlDbID);
           }).toList();
+          // Alert
+          final alerts = resAlert.data as List<dynamic>;
+          final showAlert = alerts.where((al) {
+            final alAsMap = al as Map<String, dynamic>;
+            final alDvID = alAsMap['device_id'] as String;
+            return showDeviceIDs.contains(alDvID);
+          }).toList();
+          // Condition
+          final showAlertIDs = showAlert
+              .map((al) => (al as Map<String, dynamic>)['id'] as String)
+              .toList();
+          final conditions = resCondition.data as List<dynamic>;
+          final showCondition = conditions.where((cd) {
+            final cdAsMap = cd as Map<String, dynamic>;
+            final cdAlID = cdAsMap['alert_id'] as String;
+            return showAlertIDs.contains(cdAlID);
+          }).toList();
+          // Action
+          final actions = resAction.data as List<dynamic>;
+          final showAction = actions.where((ac) {
+            final acAsMap = ac as Map<String, dynamic>;
+            final acAlID = acAsMap['alert_id'] as String;
+            return showAlertIDs.contains(acAlID);
+          }).toList();
           return Response.ok(jsonEncode({
             'projects': showProject,
             'brokers': showBroker,
@@ -718,6 +752,9 @@ class Api {
             'attributes': showAttribute,
             'dashboards': showDashboard,
             'tiles': showTile,
+            'alerts': showAlert,
+            'conditions': showCondition,
+            'actions': showAction,
           }));
         } else {
           // is admin then we query data from table user and user_project
@@ -738,6 +775,9 @@ class Api {
             'attributes': resAttribute.data,
             'dashboards': resDashboard.data,
             'tiles': resTile.data,
+            'alerts': resAlert.data,
+            'conditions': resCondition.data,
+            'actions': resAction.data,
           }));
         }
       } catch (e) {
